@@ -18,7 +18,7 @@ npm run dev works without errors.
 
 ## M1 - Camera
 
-Status: TODO
+Status: DONE
 
 - Request webcam permission
 - Display mirrored webcam feed
