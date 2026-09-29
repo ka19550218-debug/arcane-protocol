@@ -157,7 +157,7 @@ Do not duplicate gesture tracking.
 
 ## M9 - Story Polish
 
-Status: TODO
+Status: DONE
 
 - ECHO dialogue
 - Story reveal

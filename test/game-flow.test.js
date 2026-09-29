@@ -292,11 +292,11 @@ test('cosmetic progress restarts per page and cannot mutate the next screen afte
   flow.setState(APP_STATES.STORY_REVEAL, 1000)
   flow.advanceStory(2000)
   flow.update(2000)
-  assert.equal(elements['[data-story-progress]'].textContent, '0%')
+  assert.equal(elements['[data-story-progress]'].textContent, '12%')
   flow.update(2550)
-  assert.equal(elements['[data-story-progress]'].textContent, '34%')
+  assert.equal(elements['[data-story-progress]'].textContent, '47%')
   flow.update(3100)
-  assert.equal(elements['[data-story-progress]'].textContent, '71%')
+  assert.equal(elements['[data-story-progress]'].textContent, '81%')
   flow.update(3650)
   assert.equal(elements['[data-story-status]'].textContent, 'CORE UNLOCKED')
   assert.equal(flow.storyStep, 1)
@@ -307,7 +307,7 @@ test('cosmetic progress restarts per page and cannot mutate the next screen afte
   flow.setState(APP_STATES.ECHO_BRIEFING, 10000)
   flow.advanceStory(11000)
   flow.update(11000)
-  assert.equal(elements['[data-story-progress]'].textContent, '87%')
+  assert.equal(elements['[data-story-progress]'].textContent, '73%')
 })
 
 

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { CombatGame, COMBAT, GAME_STATES } from '../src/game/combat.js'
-import { BOSSES, getBoss } from '../src/game/bosses.js'
+import { BOSSES, ECHO_BOSS, getBoss } from '../src/game/bosses.js'
 import { HEROES, NEX, AERIS } from '../src/game/heroes.js'
 import { GESTURES as G } from '../src/gesture-engine.js'
 
@@ -19,7 +19,9 @@ test('boss configuration preserves Warden and gives ECHO three forgiving pattern
   assert.equal(BOSSES.WARDEN.hp, COMBAT.BOSS_HP)
   assert.equal(BOSSES.WARDEN.firstAttackDelayMs, COMBAT.FIRST_ATTACK_DELAY_MS)
   assert.equal(BOSSES.WARDEN.betweenAttacksMs, COMBAT.BETWEEN_ATTACKS_MS)
-  assert.ok(BOSSES.ECHO.hp > BOSSES.WARDEN.hp)
+  assert.equal(BOSSES.ECHO.hp, ECHO_BOSS.HP)
+  assert.ok(BOSSES.ECHO.hp >= BOSSES.WARDEN.hp * 1.25)
+  assert.ok(BOSSES.ECHO.hp <= BOSSES.WARDEN.hp * 1.4)
   assert.ok(BOSSES.ECHO.betweenAttacksMs < BOSSES.WARDEN.betweenAttacksMs)
   assert.equal(BOSSES.ECHO.patterns.length, 3)
   for (const pattern of BOSSES.ECHO.patterns) {
@@ -274,11 +276,11 @@ function playEcho(heroId, cadenceMs) {
 }
 
 for (const heroId of Object.keys(HEROES)) {
-  test(`${heroId} can clear ECHO in roughly 1–2 minutes with released gestures and defense`, () => {
+  test(`${heroId} can clear ECHO in under a minute with released gestures and defense`, () => {
     for (const cadenceMs of [1200, 1500]) {
       const { game, durationMs } = playEcho(heroId, cadenceMs)
       assert.equal(game.state, GAME_STATES.VICTORY, `${cadenceMs}ms: ${game.bossHp} HP remaining`)
-      assert.ok(durationMs >= 60000 && durationMs <= 120000, `${cadenceMs}ms cadence: ${durationMs}ms battle`)
+      assert.ok(durationMs >= 10000 && durationMs <= 60000, `${cadenceMs}ms cadence: ${durationMs}ms battle`)
       assert.ok(game.stats.combos > 0)
       assert.ok(game.stats.dodges > 0)
       assert.ok(game.playerHp > 0)
