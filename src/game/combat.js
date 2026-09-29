@@ -69,6 +69,7 @@ export class CombatGame {
     this.playerHp = COMBAT.PLAYER_HP
     this.bossHp = COMBAT.BOSS_HP
     this.score = 0
+    this.stats = { attacks: 0, blocks: 0, dodges: 0, combos: 0 }
     this.attack = null
     this.attackCount = 0
     this.nextAttackAt = Infinity
@@ -144,10 +145,12 @@ export class CombatGame {
   activateCombo(combo, now) {
     if (combo === COMBOS.DUAL_PULSE) {
       if (now < this.nextDualPulseAt) return
+      this.stats.combos += 1
       this.nextDualPulseAt = now + COMBAT.DUAL_PULSE_COOLDOWN_MS
       this.damageBoss(COMBAT.DUAL_PULSE_DAMAGE, COMBAT.DUAL_PULSE_SCORE, 'DUAL PULSE', 'dual-pulse', now)
     } else if (combo === COMBOS.FULL_BARRIER) {
       if (now < this.nextFullBarrierAt) return
+      this.stats.combos += 1
       this.nextFullBarrierAt = now + COMBAT.FULL_BARRIER_COOLDOWN_MS
       this.fullBarrierStartedAt = now
       this.fullBarrierUntil = now + COMBAT.FULL_BARRIER_DURATION_MS
@@ -157,6 +160,7 @@ export class CombatGame {
       this.showFeedback('FULL BARRIER', 'shield', now)
     } else if (combo === COMBOS.OVERDRIVE) {
       if (now < this.nextOverdriveAt) return
+      this.stats.combos += 1
       this.nextOverdriveAt = now + COMBAT.OVERDRIVE_COOLDOWN_MS
       this.damageBoss(COMBAT.OVERDRIVE_DAMAGE, COMBAT.OVERDRIVE_SCORE, 'OVERDRIVE', 'overdrive', now)
     }
@@ -172,6 +176,7 @@ export class CombatGame {
   }
 
   damageBoss(damage, score, label, kind, now) {
+    this.stats.attacks += 1
     this.bossHp = Math.max(0, this.bossHp - damage)
     this.score += score
     this.showFeedback(`${label}  −${damage}  +${score}`, kind, now)
@@ -238,16 +243,19 @@ export class CombatGame {
     this.nextAttackAt = now + COMBAT.BETWEEN_ATTACKS_MS
 
     if (this.fullBarrierStartedAt <= attack.impactAt && attack.impactAt < this.fullBarrierUntil) {
+      this.stats.blocks += 1
       this.score += COMBAT.FULL_BARRIER_BLOCK_SCORE
       this.showFeedback(`FULL BARRIER BLOCKED  +${COMBAT.FULL_BARRIER_BLOCK_SCORE}`, 'shield', now)
       return
     }
     if (attack.type === 'ENERGY_BLAST' && this.shieldStartedAt <= attack.impactAt && attack.impactAt < this.shieldUntil) {
+      this.stats.blocks += 1
       this.score += COMBAT.BLOCK_SCORE
       this.showFeedback(`BLOCKED  +${COMBAT.BLOCK_SCORE}`, 'shield', now)
       return
     }
     if (attack.type === 'SWEEP' && attack.defended) {
+      this.stats.dodges += 1
       this.score += COMBAT.DODGE_SCORE
       this.showFeedback(`DODGED  +${COMBAT.DODGE_SCORE}`, 'dodge', now)
       return

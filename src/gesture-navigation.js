@@ -27,17 +27,19 @@ export class GestureNavigation {
     this.activeButton = null
     this.dwellStartedAt = 0
     this.selectionLocked = false
+    this.lockedUntilPointRelease = false
     this.smoothedPosition = null
     this.lastTimestamp = 0
 
     this.menu.addEventListener('click', (event) => {
       const button = event.target.closest('[data-navigation-value]')
-      if (button) this.activate(button)
+      if (button && !button.disabled) this.activate(button)
     })
   }
 
   update({ gesture, indexTip, timestamp, videoElement }) {
     if (gesture !== GESTURES.POINT || !indexTip) {
+      this.lockedUntilPointRelease = false
       this.hideCursor()
       this.resetDwell()
       this.smoothedPosition = null
@@ -47,6 +49,8 @@ export class GestureNavigation {
     const target = mapMirroredPoint(indexTip, videoElement, this.container)
     const position = this.smoothPosition(target, timestamp)
     this.showCursor(position)
+
+    if (this.lockedUntilPointRelease) return
 
     const hoveredButton = this.getHoveredButton(position)
     this.cursor.classList.toggle('is-hovering', Boolean(hoveredButton))
@@ -102,6 +106,7 @@ export class GestureNavigation {
     const clientX = containerRect.left + position.x
     const clientY = containerRect.top + position.y
     return [...this.menu.querySelectorAll('[data-navigation-value]')].find((button) => {
+      if (button.disabled) return false
       const rect = button.getBoundingClientRect()
       return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom
     })
@@ -121,12 +126,20 @@ export class GestureNavigation {
     this.selectionLocked = false
   }
 
+  lockUntilPointRelease() {
+    this.resetDwell()
+    this.selectionLocked = true
+    this.lockedUntilPointRelease = true
+    this.cursor.classList.remove('is-hovering')
+  }
+
   activate(button) {
     this.resetDwell()
     this.menu.querySelectorAll('.is-selected').forEach((selectedButton) => {
       selectedButton.classList.remove('is-selected')
     })
     button.classList.add('is-selected')
+    this.lockUntilPointRelease()
     this.onSelect?.(button.dataset.navigationValue)
   }
 }

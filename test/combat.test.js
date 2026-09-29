@@ -9,6 +9,7 @@ test('a held fist fires once and requires release plus cooldown to repeat', () =
   for (let now = 0; now <= 1200; now += 40) game.acceptGesture(GESTURES.FIST, now)
   assert.equal(game.bossHp, COMBAT.BOSS_HP - COMBAT.PULSE_DAMAGE)
   assert.equal(game.score, COMBAT.PULSE_SCORE)
+  assert.equal(game.stats.attacks, 1)
 
   game.acceptGesture(GESTURES.NONE, 1201)
   game.acceptGesture(GESTURES.FIST, 1202)
@@ -37,6 +38,8 @@ test('shield blocks an energy blast and correct swipe dodges the next sweep', ()
   game.update(9400)
   assert.equal(game.playerHp, COMBAT.PLAYER_HP)
   assert.equal(game.score, COMBAT.BLOCK_SCORE + COMBAT.DODGE_SCORE)
+  assert.equal(game.stats.blocks, 1)
+  assert.equal(game.stats.dodges, 1)
   assert.match(game.feedback.message, /DODGED/)
 })
 
@@ -82,6 +85,7 @@ test('victory and defeat stop the encounter; restart resets it', () => {
   assert.equal(game.playerHp, COMBAT.PLAYER_HP)
   assert.equal(game.bossHp, COMBAT.BOSS_HP)
   assert.equal(game.score, 0)
+  assert.deepEqual(game.stats, { attacks: 0, blocks: 0, dodges: 0, combos: 0 })
   game.acceptGesture(GESTURES.FIST, 100001)
   assert.equal(game.bossHp, COMBAT.BOSS_HP - COMBAT.PULSE_DAMAGE)
 
@@ -102,6 +106,8 @@ test('dual pulse takes priority over both individual fists and a held combo cann
   assert.equal(game.bossHp, COMBAT.BOSS_HP - COMBAT.DUAL_PULSE_DAMAGE)
   assert.equal(game.score, COMBAT.DUAL_PULSE_SCORE)
   assert.match(game.feedback.message, /DUAL PULSE/)
+  assert.equal(game.stats.combos, 1)
+  assert.equal(game.stats.attacks, 1)
 
   game.acceptHands({ LEFT: GESTURES.FIST, RIGHT: GESTURES.NONE }, 6001)
   game.acceptHands({ LEFT: GESTURES.FIST, RIGHT: GESTURES.FIST }, 6002)
@@ -139,6 +145,8 @@ test('full barrier blocks an active sweep, rewards the block once, and respects 
   game.update(game.attack.impactAt)
   assert.equal(game.playerHp, COMBAT.PLAYER_HP)
   assert.equal(game.score, COMBAT.FULL_BARRIER_BLOCK_SCORE)
+  assert.equal(game.stats.blocks, 1)
+  assert.equal(game.stats.combos, 1)
   assert.match(game.feedback.message, /FULL BARRIER BLOCKED/)
   game.acceptHands({ LEFT: GESTURES.NONE, RIGHT: GESTURES.NONE }, 3400)
   game.acceptHands({ LEFT: GESTURES.OPEN_PALM, RIGHT: GESTURES.OPEN_PALM }, 3500)

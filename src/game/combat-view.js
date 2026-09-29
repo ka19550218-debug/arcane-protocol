@@ -1,25 +1,19 @@
 import { COMBAT, GAME_STATES } from './combat.js'
-import { createGestureButton } from '../gesture-navigation.js'
 
 export class CombatView {
-  constructor(root) {
+  constructor({ root, shield }) {
     this.root = root
     this.playerHp = root.querySelector('[data-player-hp]')
     this.playerBar = root.querySelector('[data-player-bar]')
     this.bossHp = root.querySelector('[data-boss-hp]')
     this.bossBar = root.querySelector('[data-boss-bar]')
     this.score = root.querySelector('[data-score]')
-    this.state = root.querySelector('[data-game-state]')
     this.warning = root.querySelector('[data-warning]')
     this.warningTitle = root.querySelector('[data-warning-title]')
     this.warningInstruction = root.querySelector('[data-warning-instruction]')
     this.warningCountdown = root.querySelector('[data-warning-countdown]')
     this.feedback = root.querySelector('[data-combat-feedback]')
-    this.shield = root.querySelector('[data-shield]')
-    this.menu = root.querySelector('.navigation-menu')
-    this.menuButtons = root.querySelector('.navigation-buttons')
-    this.menuLabel = root.querySelector('.navigation-label')
-    this.lastState = null
+    this.shield = shield
   }
 
   render(game, now) {
@@ -28,8 +22,6 @@ export class CombatView {
     setText(this.bossHp, `${game.bossHp} / ${COMBAT.BOSS_HP}`)
     this.bossBar.style.width = `${game.bossHp / COMBAT.BOSS_HP * 100}%`
     setText(this.score, game.score.toLocaleString())
-    setText(this.state, game.state)
-    this.root.dataset.gameState = game.state.toLowerCase()
 
     const attack = game.attack
     this.warning.hidden = !attack
@@ -47,6 +39,8 @@ export class CombatView {
     this.feedback.dataset.kind = feedbackVisible ? game.feedback.kind : 'neutral'
     this.root.classList.toggle('shield-active', game.state === GAME_STATES.COMBAT && now < game.shieldUntil)
     this.root.classList.toggle('full-barrier-active', game.state === GAME_STATES.COMBAT && now < game.fullBarrierUntil)
+    this.shield.classList.toggle('shield-active', game.state === GAME_STATES.COMBAT && now < game.shieldUntil)
+    this.shield.classList.toggle('full-barrier-active', game.state === GAME_STATES.COMBAT && now < game.fullBarrierUntil)
     this.root.classList.toggle('boss-hit', ['hit', 'dual-pulse', 'overdrive'].includes(game.feedback.kind) && now < game.feedback.until)
     this.root.classList.toggle('dual-pulse-effect', game.feedback.kind === 'dual-pulse' && now < game.feedback.until)
     this.root.classList.toggle('overdrive-effect', game.feedback.kind === 'overdrive' && now < game.feedback.until)
@@ -56,20 +50,6 @@ export class CombatView {
       : game.state === GAME_STATES.COMBAT && now < game.shieldUntil
         ? `SHIELD ${(Math.max(0, game.shieldUntil - now) / 1000).toFixed(1)}s`
         : 'SHIELD OFFLINE')
-
-    if (game.state !== this.lastState) {
-      this.lastState = game.state
-      this.menuButtons.replaceChildren()
-      this.menu.hidden = game.state === GAME_STATES.COMBAT
-      if (!this.menu.hidden) {
-        const isReady = game.state === GAME_STATES.READY
-        this.menuLabel.textContent = 'POINT AND HOLD TO SELECT'
-        this.menuButtons.append(createGestureButton({
-          label: isReady ? 'START COMBAT' : 'RESTART COMBAT',
-          value: isReady ? 'START' : 'RESTART',
-        }))
-      }
-    }
   }
 }
 
