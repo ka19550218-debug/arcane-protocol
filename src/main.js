@@ -6,6 +6,7 @@ import { startHandTracking } from './hand-tracker.js'
 import { GestureNavigation } from './gesture-navigation.js'
 import { CombatGame, GAME_STATES } from './game/combat.js'
 import { CombatView } from './game/combat-view.js'
+import { getHero, abilityLegend } from './game/heroes.js'
 import { APP_STATES, GameFlow } from './game-flow.js'
 
 const app = document.querySelector('#app')
@@ -36,7 +37,7 @@ app.innerHTML = `
           <p class="gesture-quality-message">Show a gesture to receive guidance</p>
           <p class="gesture-quality-debug" aria-hidden="true"></p>
         </section>
-        <div class="controls-guide"><p><strong>FIST</strong><span>PULSE SHOT</span></p><p><strong>OPEN PALM</strong><span>ENERGY SHIELD</span></p><p><strong>SWIPE ← →</strong><span>DODGE</span></p><p><strong>2 FISTS</strong><span>DUAL PULSE</span></p><p><strong>2 PALMS</strong><span>FULL BARRIER</span></p><p><strong>FIST + PALM</strong><span>OVERDRIVE</span></p></div>
+        <div class="controls-guide">${abilityLegend(getHero()).map(([gesture, name]) => `<p><strong>${gesture}</strong><span>${name}</span></p>`).join('')}</div>
       </aside>
     </div>
   </section>
@@ -83,17 +84,20 @@ requestAnimationFrame(updateCombat)
 
 function handleStateChange(state) {
   gestureNavigation.lockUntilPointRelease()
+  const hero = getHero(flow.selectedHero)
+  document.querySelector('.controls-guide').innerHTML = abilityLegend(hero)
+    .map(([gesture, name]) => `<p><strong>${gesture}</strong><span>${name}</span></p>`).join('')
   if (state === APP_STATES.COMBAT) {
-    combatGame.start(performance.now())
+    combatGame.start(performance.now(), flow.selectedHero)
     combatView = new CombatView({ root: stageElement, shield: shieldElement })
     combatView.render(combatGame, performance.now())
     return
   }
 
   combatView = null
-  shieldElement.textContent = 'SHIELD OFFLINE'
+  shieldElement.textContent = `${hero.defense.name} OFFLINE`
   shieldElement.classList.remove('shield-active', 'full-barrier-active')
-  if (state === APP_STATES.INTRO) combatGame.reset()
+  if (state === APP_STATES.INTRO) combatGame.reset(flow.selectedHero)
 }
 
 function updateCombat(now) {

@@ -1,6 +1,7 @@
 import { GESTURES } from './gesture-engine.js'
 import { createGestureButton } from './gesture-navigation.js'
 import { detectCombo } from './game/combat.js'
+import { HEROES, getHero, abilityLegend } from './game/heroes.js'
 
 export const APP_STATES = Object.freeze({
   INTRO: 'INTRO',
@@ -33,6 +34,8 @@ const ACTION_STATES = {
   CALIBRATION_CONTINUE: APP_STATES.CALIBRATION,
   TUTORIAL_CONTINUE: APP_STATES.TUTORIAL,
   SELECT_VEX: APP_STATES.HERO_SELECT,
+  SELECT_NEX: APP_STATES.HERO_SELECT,
+  SELECT_AERIS: APP_STATES.HERO_SELECT,
   BEGIN_MISSION: APP_STATES.BRIEFING,
   RETRY: APP_STATES.RESULT,
   RESULT_CONTINUE: APP_STATES.RESULT,
@@ -53,6 +56,7 @@ export class GameFlow {
     this.calibrationHand = null
     this.lastCalibrationSampleAt = null
     this.tutorialComplete = new Set()
+    this.selectedHero = 'VEX'
     this.result = null
     this.render()
   }
@@ -92,6 +96,9 @@ export class GameFlow {
         if (this.tutorialComplete.size === TUTORIAL_ACTIONS.length) this.setState(APP_STATES.HERO_SELECT)
         break
       case 'SELECT_VEX':
+      case 'SELECT_NEX':
+      case 'SELECT_AERIS':
+        this.selectedHero = value.slice('SELECT_'.length)
         this.setState(APP_STATES.BRIEFING)
         break
       case 'BEGIN_MISSION':
@@ -118,7 +125,7 @@ export class GameFlow {
   }
 
   showResult(outcome, score, stats) {
-    this.result = { outcome, score, teaser: false, ...(stats ? { stats: { ...stats } } : {}) }
+    this.result = { outcome, score, heroId: this.selectedHero, teaser: false, ...(stats ? { stats: { ...stats } } : {}) }
     this.setState(APP_STATES.RESULT)
   }
 
@@ -183,6 +190,7 @@ export class GameFlow {
     this.calibrationHand = null
     this.lastCalibrationSampleAt = null
     this.tutorialComplete.clear()
+    this.selectedHero = 'VEX'
     this.result = null
   }
 
@@ -212,7 +220,7 @@ export class GameFlow {
         this.renderBriefing()
         break
       case APP_STATES.COMBAT:
-        this.stage.innerHTML = combatMarkup()
+        this.stage.innerHTML = combatMarkup(getHero(this.selectedHero))
         break
       case APP_STATES.RESULT:
         this.renderResult()
@@ -320,27 +328,35 @@ export class GameFlow {
         <p class="screen-kicker">COMBAT AVATAR SELECTION</p>
         <h2 id="hero-title">CHOOSE YOUR <span>OPERATOR</span></h2>
         <div class="hero-grid">
-          <article class="hero-card hero-vex"><p>VEX</p><strong>ASSAULT</strong><span>ONLINE · PULSE / SHIELD / DODGE</span></article>
-          <article class="hero-card is-locked"><p>NEX</p><strong>HACKER</strong><span>SYNCHRONIZING · UNAVAILABLE</span></article>
-          <article class="hero-card is-locked"><p>AERIS</p><strong>CHRONOMANCER</strong><span>SYNCHRONIZING · UNAVAILABLE</span></article>
+          ${Object.values(HEROES).map((hero) => `
+            <article class="hero-card hero-${hero.id.toLowerCase()}">
+              <p>${hero.id}</p><strong>${hero.role}</strong><span>ONLINE · ${hero.description}</span>
+              <div data-hero-action="${hero.id}"></div>
+            </article>`).join('')}
         </div>
-        <p class="screen-copy">VEX is the only combat-ready operator in this mission build.</p>
-        <div class="screen-actions"></div>
+        <p class="screen-copy">All operators online. Choose your combat style.</p>
+        <p class="navigation-hint">POINT + HOLD 0.8s TO SELECT · RELAX HAND BETWEEN SELECTIONS</p>
       </section>`
-    this.appendAction('SELECT VEX', 'SELECT_VEX')
+    for (const hero of Object.values(HEROES)) {
+      this.stage.querySelector(`[data-hero-action="${hero.id}"]`).append(
+        createGestureButton({ label: `SELECT ${hero.id}`, value: `SELECT_${hero.id}` }),
+      )
+    }
   }
 
   renderBriefing() {
+    const hero = getHero(this.selectedHero)
     this.stage.innerHTML = `
       <section class="story-screen briefing-screen" aria-labelledby="briefing-title">
         <p class="screen-kicker">ECHO · SECURE CHANNEL</p>
         <h2 id="briefing-title">MISSION <span>BRIEFING</span></h2>
+        <div class="success-seal" role="status">SELECTED: ${hero.id} · ${hero.role}</div>
         <div class="echo-message">
-          <p><strong>ECHO:</strong> Operator synchronization complete.</p>
+          <p><strong>ECHO:</strong> ${hero.id} synchronization complete.</p>
           <p><strong>TARGET:</strong> THE WARDEN</p>
           <p>The Warden is blocking access to the core. Eliminate it.</p>
         </div>
-        <p class="screen-copy">Your gesture controls remain active throughout the encounter.</p>
+        <p class="screen-copy">${hero.description}. Your gesture controls remain active throughout the encounter.</p>
         <div class="screen-actions"></div>
       </section>`
     this.appendAction('BEGIN MISSION', 'BEGIN_MISSION')
@@ -348,6 +364,7 @@ export class GameFlow {
 
   renderResult() {
     const victory = this.result?.outcome === 'VICTORY'
+    const hero = getHero(this.result?.heroId ?? this.selectedHero)
     if (this.result?.teaser) {
       this.stage.innerHTML = `
         <section class="story-screen result-screen teaser-screen" aria-labelledby="teaser-title">
@@ -367,6 +384,7 @@ export class GameFlow {
         <h2 id="result-title">${victory ? 'MISSION <span>COMPLETE</span>' : 'CONNECTION <span>LOST</span>'}</h2>
         <div class="result-summary">
           <strong>${victory ? 'THE WARDEN DEFEATED' : 'MISSION FAILED'}</strong>
+          <p class="result-operative">OPERATIVE <span>${hero.id}</span></p>
           <p>SCORE <span>${Number(this.result?.score ?? 0).toLocaleString()}</span></p>
           ${this.result?.stats ? `<dl class="result-stats">
             ${Object.entries({ attacks: 'ATTACKS LANDED', blocks: 'BLOCKS', dodges: 'DODGES', combos: 'COMBOS USED' })
@@ -375,7 +393,7 @@ export class GameFlow {
         </div>
         <p class="screen-copy">${victory
           ? 'The core is accessible. ECHO is awaiting your next decision.'
-          : 'VEX lost synchronization. Re-enter the encounter when ready.'}</p>
+          : `${hero.id} lost synchronization. Re-enter the encounter when ready.`}</p>
         <div class="screen-actions"></div>
       </section>`
     if (victory) this.appendAction('CONTINUE', 'RESULT_CONTINUE')
@@ -417,17 +435,18 @@ function tutorialCard(action, complete) {
   </article>`
 }
 
-function combatMarkup() {
+function combatMarkup(hero) {
   return `
     <section class="combat-panel" aria-label="Combat arena">
-      <div class="combat-topline"><span>ENCOUNTER 01</span><span>VEX VS THE WARDEN</span></div>
+      <div class="combat-topline"><span>ENCOUNTER 01</span><span>${hero.id} VS THE WARDEN</span></div>
       <div class="boss-status"><div class="stat-label"><span>THE WARDEN</span><strong data-boss-hp>300 / 300</strong></div><div class="health-track boss-track"><span data-boss-bar></span></div></div>
       <div class="arena">
         <div class="arena-grid" aria-hidden="true"></div>
         <div class="warning-panel" data-warning hidden><span class="warning-eyebrow">WARNING</span><strong data-warning-title>ENERGY BLAST</strong><span data-warning-instruction>OPEN PALM TO BLOCK</span><span class="warning-countdown" data-warning-countdown>1.8s</span></div>
-        <div class="fighters" aria-hidden="true"><div class="fighter fighter-vex"><div class="fighter-core"></div><span>VEX</span></div><div class="fighter fighter-warden"><div class="fighter-core"></div><span>THE WARDEN</span></div></div>
+        <div class="fighters" aria-hidden="true"><div class="fighter fighter-player fighter-${hero.id.toLowerCase()}"><div class="fighter-core"></div><span>${hero.id}</span></div><div class="fighter fighter-warden"><div class="fighter-core"></div><span>THE WARDEN</span></div></div>
       </div>
-      <p class="combat-feedback" data-combat-feedback aria-live="polite">FIST: PULSE SHOT · OPEN PALM: SHIELD · SWIPE: DODGE</p>
-      <div class="combat-bottomline"><div class="player-status"><div class="stat-label"><span>VEX · HP</span><strong data-player-hp>100 / 100</strong></div><div class="health-track player-track"><span data-player-bar></span></div></div><div class="score-status"><span>SCORE</span><strong data-score>0</strong></div></div>
+      <p class="combat-feedback" data-combat-feedback aria-live="polite">${abilityLegend(hero).slice(0, 3).map(([gesture, name]) => `${gesture}: ${name}`).join(' · ')}</p>
+      <p class="combat-status" data-combat-status role="status"></p>
+      <div class="combat-bottomline"><div class="player-status"><div class="stat-label"><span>${hero.id} · HP</span><strong data-player-hp>100 / 100</strong></div><div class="health-track player-track"><span data-player-bar></span></div></div><div class="score-status"><span>SCORE</span><strong data-score>0</strong></div></div>
     </section>`
 }

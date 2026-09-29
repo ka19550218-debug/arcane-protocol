@@ -124,7 +124,7 @@ Status: DONE
 
 ## M7 - Complete MVP
 
-Status: TODO
+Status: DONE
 
 - Intro
 - Calibration
