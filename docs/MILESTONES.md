@@ -48,7 +48,7 @@ Moving a hand in front of the camera updates landmarks in real time.
 
 ## M3 - Gesture Engine
 
-Status: TODO
+Status: DONE
 
 Implement:
 
@@ -68,7 +68,7 @@ At least 3 gestures work reliably.
 
 ## M4 - Gesture UI Navigation
 
-Status: TODO
+Status: DONE
 
 - Index finger controls virtual cursor
 - Cursor position is smoothed
