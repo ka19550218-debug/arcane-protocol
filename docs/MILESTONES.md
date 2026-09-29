@@ -2,7 +2,7 @@
 
 ## M0 - Foundation
 
-Status: TODO
+Status: DONE
 
 - Create Vite vanilla JavaScript project
 - Verify dev server works

@@ -1,0 +1,34 @@
+:root {
+  color: #f4f7ff;
+  background: #10131f;
+  font-family: Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+#app {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+}
+
+.app-shell {
+  text-align: center;
+}
+
+h1 {
+  margin: 0;
+  letter-spacing: 0.08em;
+}
+
+p {
+  color: #aab4cc;
+}
