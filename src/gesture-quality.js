@@ -1,4 +1,4 @@
-import { FINGER_STATE_THRESHOLDS, getFingerStates, getFistTipExtension } from './finger-state.js'
+import { FINGER_STATE_THRESHOLDS, getFingerStates, getFistTipExtension, getVSignSeparation } from './finger-state.js'
 import { GESTURES } from './gesture-engine.js'
 
 export const GESTURE_QUALITY_THRESHOLDS = Object.freeze({
@@ -16,7 +16,7 @@ export const GESTURE_QUALITY_THRESHOLDS = Object.freeze({
 })
 
 const MAIN_FINGERS = ['INDEX', 'MIDDLE', 'RING', 'PINKY']
-const STATIC_GESTURES = [GESTURES.OPEN_PALM, GESTURES.FIST, GESTURES.POINT]
+const STATIC_GESTURES = [GESTURES.OPEN_PALM, GESTURES.FIST, GESTURES.POINT, GESTURES.V_SIGN]
 
 export class GestureQualityEvaluator {
   constructor() {
@@ -40,6 +40,7 @@ export class GestureQualityEvaluator {
       [GESTURES.OPEN_PALM]: evaluateOpenPalm(hand, fingerStates, stability),
       [GESTURES.FIST]: evaluateFist(hand, fingerStates, stability),
       [GESTURES.POINT]: evaluatePoint(fingerStates, stability),
+      [GESTURES.V_SIGN]: evaluateVSign(hand, fingerStates, stability),
     }
     const attemptedGesture = STATIC_GESTURES.includes(classifiedGesture)
       ? classifiedGesture
@@ -85,6 +86,9 @@ export class GestureQualityEvaluator {
 }
 
 function identifyAttempt(states, evaluations) {
+  if (states.INDEX !== 'CURLED' && states.MIDDLE !== 'CURLED' &&
+    (states.INDEX === 'EXTENDED' || states.MIDDLE === 'EXTENDED') &&
+    (states.RING !== 'EXTENDED' || states.PINKY !== 'EXTENDED')) return GESTURES.V_SIGN
   if (states.INDEX === 'EXTENDED' && states.MIDDLE === 'EXTENDED') return GESTURES.OPEN_PALM
   if (states.INDEX === 'EXTENDED') return GESTURES.POINT
   // No extended main finger and at least one bend signals an attempted fist.
@@ -94,6 +98,19 @@ function identifyAttempt(states, evaluations) {
   return STATIC_GESTURES.reduce((best, gesture) => (
     evaluations[gesture].quality > evaluations[best].quality ? gesture : best
   ), GESTURES.OPEN_PALM)
+}
+
+function evaluateVSign(hand, states, stability) {
+  const extended = average(['INDEX', 'MIDDLE'].map((name) => stateScore(states[name], 'EXTENDED')))
+  const folded = average(['RING', 'PINKY'].map((name) => states[name] !== 'EXTENDED' ? 1 : 0))
+  const spread = Math.min(1, getVSignSeparation(hand) / FINGER_STATE_THRESHOLDS.V_SIGN_MIN_SEPARATION_PALM_RATIO)
+  const required = extended < 1 ? 'EXTENSION' : folded < 1 ? 'FOLD' : spread < 1 ? 'SPREAD' : null
+  return summarize([
+    component('EXTENSION', extended, 0.3, 'Extend your index and middle fingers'),
+    component('FOLD', folded, 0.25, 'Fold your ring and pinky fingers'),
+    component('SPREAD', spread, 0.2, 'Separate your index and middle fingers'),
+    component('STABILITY', stability, 0.25, 'Keep your hand steadier'),
+  ], required)
 }
 
 function evaluateOpenPalm(hand, states, stability) {

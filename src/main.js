@@ -87,13 +87,14 @@ function handleStateChange(state) {
   const hero = getHero(flow.selectedHero)
   document.querySelector('.controls-guide').innerHTML = abilityLegend(hero)
     .map(([gesture, name]) => `<p><strong>${gesture}</strong><span>${name}</span></p>`).join('')
-  if (state === APP_STATES.COMBAT) {
-    combatGame.start(performance.now(), flow.selectedHero)
-    combatView = new CombatView({ root: stageElement, shield: shieldElement })
+  if (flow.isCombat) {
+    combatGame.start(performance.now(), flow.selectedHero, flow.bossId)
+    combatView = new CombatView({ root: stageElement, shield: shieldElement, scoreOffset: flow.scoreBeforeBattle })
     combatView.render(combatGame, performance.now())
     return
   }
 
+  combatGame.stop()
   combatView = null
   shieldElement.textContent = `${hero.defense.name} OFFLINE`
   shieldElement.classList.remove('shield-active', 'full-barrier-active')
@@ -101,7 +102,8 @@ function handleStateChange(state) {
 }
 
 function updateCombat(now) {
-  if (flow.state === APP_STATES.COMBAT && combatView) {
+  flow.update(now)
+  if (flow.isCombat && combatView) {
     combatGame.update(now)
     combatView.render(combatGame, now)
     if (combatGame.state === GAME_STATES.VICTORY || combatGame.state === GAME_STATES.DEFEAT) {
@@ -147,7 +149,7 @@ function updateGestureDisplay(landmarks, handedness, timestamp) {
 
   const screenChangedByGesture = flow.handleHands(hands, timestamp)
   if (screenChangedByGesture) gestureNavigation.lockUntilPointRelease()
-  if (flow.state === APP_STATES.COMBAT) {
+  if (flow.isCombat) {
     combatGame.acceptHands({ LEFT: hands.LEFT.gesture, RIGHT: hands.RIGHT.gesture }, timestamp)
   }
 

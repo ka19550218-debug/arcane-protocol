@@ -143,7 +143,7 @@ DEPLOY AFTER THIS MILESTONE.
 
 ## M8 - Heroes
 
-Status: TODO
+Status: DONE
 
 - VEX
 - NEX

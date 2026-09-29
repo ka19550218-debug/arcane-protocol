@@ -1,5 +1,7 @@
 export const COMBAT = Object.freeze({
   PLAYER_HP: 100,
+  SUPER_MAX_ENERGY: 100,
+  SUPER_ENERGY_PER_BASIC_ATTACK: 20,
   BOSS_HP: 300,
   PULSE_DAMAGE: 20,
   DUAL_PULSE_DAMAGE: 45,
@@ -27,4 +29,3 @@ export const COMBAT = Object.freeze({
   DODGE_SCORE: 150,
   VICTORY_SCORE: 500,
 })
-

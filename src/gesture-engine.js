@@ -1,10 +1,11 @@
-import { FINGER_STATE_THRESHOLDS, getFingerStates, getFistTipExtension } from './finger-state.js'
+import { FINGER_STATE_THRESHOLDS, getFingerStates, getFistTipExtension, getVSignSeparation } from './finger-state.js'
 
 export const GESTURES = Object.freeze({
   NONE: 'NONE',
   POINT: 'POINT',
   OPEN_PALM: 'OPEN_PALM',
   FIST: 'FIST',
+  V_SIGN: 'V_SIGN',
   SWIPE_LEFT: 'SWIPE_LEFT',
   SWIPE_RIGHT: 'SWIPE_RIGHT',
 })
@@ -79,6 +80,11 @@ export class GestureEngine {
 
     if ([INDEX, MIDDLE, RING, PINKY].every((state) => state === 'EXTENDED')) return GESTURES.OPEN_PALM
     if (INDEX === 'EXTENDED' && [MIDDLE, RING, PINKY].every((state) => state !== 'EXTENDED')) return GESTURES.POINT
+    if (
+      INDEX === 'EXTENDED' && MIDDLE === 'EXTENDED' &&
+      RING !== 'EXTENDED' && PINKY !== 'EXTENDED' &&
+      getVSignSeparation(landmarks) >= FINGER_STATE_THRESHOLDS.V_SIGN_MIN_SEPARATION_PALM_RATIO
+    ) return GESTURES.V_SIGN
     if (
       [INDEX, MIDDLE, RING, PINKY].every((state) => state === 'CURLED') &&
       getFistTipExtension(landmarks) <= FINGER_STATE_THRESHOLDS.FIST_MAX_TIP_EXTENSION_PALM_RATIO

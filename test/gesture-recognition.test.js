@@ -116,14 +116,14 @@ test('FIST rejects folded-looking joints when tips still extend past the palm', 
   assert.ok(feedback.quality < 100)
 })
 
-test('OPEN_PALM and POINT remain valid while a V sign stays NONE', () => {
+test('OPEN_PALM and POINT remain valid alongside V_SIGN', () => {
   assert.equal(recognize(makeHand(['extended', 'extended', 'extended', 'extended'])).engine.stableGesture, GESTURES.OPEN_PALM)
   assert.equal(recognize(makeHand(['extended', 'curled', 'curled', 'curled'])).engine.stableGesture, GESTURES.POINT)
-  assert.equal(recognize(makeHand(['extended', 'extended', 'curled', 'curled'])).engine.stableGesture, GESTURES.NONE)
+  assert.equal(recognize(makeHand(['extended', 'extended', 'curled', 'curled'])).engine.stableGesture, GESTURES.V_SIGN)
   assert.equal(recognize(makeHand(['extended', 'extended', 'extended', 'curled'])).engine.stableGesture, GESTURES.NONE)
 })
 
-test('OPEN_PALM quality is driven by the number of clearly extended main fingers', () => {
+test('quality distinguishes open palms, V signs, and attempts with an extra extended finger', () => {
   const feedbackFor = (fingers) => recognize(makeHand(fingers)).feedback
   const open = feedbackFor(['extended', 'extended', 'extended', 'extended'])
   const threeExtended = feedbackFor(['extended', 'extended', 'extended', 'curled'])
@@ -131,11 +131,12 @@ test('OPEN_PALM quality is driven by the number of clearly extended main fingers
 
   assert.equal(open.gesture, GESTURES.OPEN_PALM)
   assert.ok(open.quality >= 90)
-  assert.equal(threeExtended.gesture, GESTURES.OPEN_PALM)
-  assert.ok(threeExtended.quality >= 70 && threeExtended.quality <= 85)
-  assert.equal(peace.gesture, GESTURES.OPEN_PALM)
-  assert.ok(peace.quality >= 50 && peace.quality <= 70)
-  assert.equal(peace.correction, 'Extend your ring and pinky fingers more')
+  assert.equal(threeExtended.gesture, GESTURES.V_SIGN)
+  assert.equal(threeExtended.state, 'correcting')
+  assert.equal(threeExtended.correction, 'Fold your ring and pinky fingers')
+  assert.ok(threeExtended.quality >= 70 && threeExtended.quality <= 90)
+  assert.equal(peace.gesture, GESTURES.V_SIGN)
+  assert.equal(peace.state, 'success')
 })
 
 test('POINT accepts partial non-index fingers but requires a clearly extended index', () => {
@@ -151,7 +152,7 @@ test('POINT accepts partial non-index fingers but requires a clearly extended in
   assert.equal(feedback.state, 'success')
 
   assert.equal(recognize(makeHand(['partial', 'curled', 'curled', 'curled'])).engine.stableGesture, GESTURES.NONE)
-  assert.equal(recognize(makeHand(['extended', 'extended', 'partial', 'curled'])).engine.stableGesture, GESTURES.NONE)
+  assert.equal(recognize(makeHand(['extended', 'extended', 'partial', 'curled'])).engine.stableGesture, GESTURES.V_SIGN)
   assert.equal(recognize(makeHand(['extended', 'curled', 'extended', 'partial'])).engine.stableGesture, GESTURES.NONE)
   assert.equal(recognize(makeHand(['extended', 'curled', 'partial', 'extended'])).engine.stableGesture, GESTURES.NONE)
 })
@@ -237,4 +238,56 @@ test('missing handedness uses mirrored positions and a known label when availabl
   assert.equal(assignHands([right, left]).RIGHT, right)
   assert.equal(assignHands([right, left], [[{ categoryName: 'Left' }], []]).RIGHT, right)
   assert.equal(assignHands([left]).LEFT, left)
+})
+
+
+test('V_SIGN tolerates thumb, partial folded fingers, scale, and rotation', () => {
+  for (const scale of [0.5, 1, 1.5]) {
+    for (const folded of ['curled', 'partial']) {
+      const hand = makeHand(['extended', 'extended', folded, folded], scale)
+      for (const index of [1, 2, 3, 4]) hand[index] = { ...hand[0] }
+      const rotated = hand.map(({ x, y, z }) => ({ x: 1 - y, y: x, z }))
+      for (const pose of [hand, rotated]) {
+        const { engine, feedback } = recognize(pose)
+        assert.equal(engine.rawGesture, GESTURES.V_SIGN)
+        assert.equal(feedback.state, 'success')
+      }
+    }
+  }
+})
+
+test('V_SIGN requires separation and never reports success when BASE is NONE', () => {
+  const hand = makeHand(['extended', 'extended', 'curled', 'curled'])
+  for (const index of [10, 11, 12]) hand[index].x = hand[9].x - (index - 9) * 0.025
+  const { engine, feedback } = recognize(hand)
+  assert.equal(engine.rawGesture, GESTURES.NONE)
+  assert.equal(feedback.attemptedGesture, GESTURES.V_SIGN)
+  assert.equal(feedback.state, 'correcting')
+  assert.equal(feedback.correction, 'Separate your index and middle fingers')
+  const evaluator = new GestureQualityEvaluator()
+  const good = makeHand(['extended', 'extended', 'curled', 'curled'])
+  const stale = evaluator.update([good], 0, GESTURES.NONE, GESTURES.V_SIGN)
+  assert.notEqual(stale.state, 'success')
+})
+
+test('V_SIGN gives extension and stability corrections without changing base rules', () => {
+  const partial = recognize(makeHand(['partial', 'extended', 'curled', 'curled']))
+  assert.equal(partial.engine.rawGesture, GESTURES.NONE)
+  assert.equal(partial.feedback.correction, 'Extend your index and middle fingers')
+  const hand = makeHand(['extended', 'extended', 'curled', 'curled'])
+  const evaluator = new GestureQualityEvaluator()
+  evaluator.update([hand], 0, GESTURES.V_SIGN, GESTURES.V_SIGN)
+  const moved = hand.map((point) => ({ ...point, x: point.x + 0.2 }))
+  const feedback = evaluator.update([moved], 100, GESTURES.V_SIGN, GESTURES.V_SIGN)
+  assert.equal(feedback.state, 'correcting')
+  assert.equal(feedback.correction, 'Keep your hand steadier')
+})
+
+test('V_SIGN stabilizes in three frames and swipes still take precedence', () => {
+  const hand = makeHand(['extended', 'extended', 'curled', 'curled'])
+  const engine = new GestureEngine()
+  assert.equal(engine.update([hand], 0), GESTURES.NONE)
+  assert.equal(engine.update([hand], 33), GESTURES.NONE)
+  assert.equal(engine.update([hand], 66), GESTURES.V_SIGN)
+  assert.equal(engine.update([hand.map((p) => ({ ...p, x: p.x + 0.2 }))], 100), GESTURES.SWIPE_LEFT)
 })

@@ -57,14 +57,15 @@ test('mirror matrix reflects once and can end the encounter without a later atta
   assert.equal(game.attack, null)
 })
 
-test('system hack boosts attacks temporarily without dealing its own damage', () => {
+test('system hack deals damage and boosts attacks temporarily', () => {
   const game = new CombatGame('NEX')
   game.start(0)
+  game.superEnergy = COMBAT.SUPER_MAX_ENERGY
   combo(game, G.FIST, G.OPEN_PALM, 0)
-  assert.equal(game.bossHp, COMBAT.BOSS_HP)
+  assert.equal(game.bossHp, COMBAT.BOSS_HP - NEX.HACK_DAMAGE)
   release(game, 1)
   combo(game, G.FIST, G.FIST, 2)
-  let expectedHp = COMBAT.BOSS_HP - Math.round(NEX.BURST_DAMAGE * NEX.HACK_MULTIPLIER)
+  let expectedHp = COMBAT.BOSS_HP - NEX.HACK_DAMAGE - Math.round(NEX.BURST_DAMAGE * NEX.HACK_MULTIPLIER)
   assert.equal(game.bossHp, expectedHp)
   release(game, NEX.HACK_DURATION_MS - 1)
   combo(game, G.FIST, G.NONE, NEX.HACK_DURATION_MS)
@@ -133,6 +134,7 @@ for (const hero of Object.values(HEROES)) {
     ]) {
       const game = new CombatGame(hero.id)
       game.start(0)
+      if (key === 'ultimate') game.superEnergy = COMBAT.SUPER_MAX_ENERGY
       combo(game, left, right, 0)
       const hp = game.bossHp
       const stats = { ...game.stats }
@@ -142,6 +144,7 @@ for (const hero of Object.values(HEROES)) {
       assert.deepEqual(game.stats, stats)
       assert.deepEqual([game.frozenUntil, game.vulnerableUntil, game.shieldUntil], until)
       release(game, hero[key].cooldownMs + 2)
+      if (key === 'ultimate') game.superEnergy = COMBAT.SUPER_MAX_ENERGY
       combo(game, left, right, hero[key].cooldownMs + 3)
       if (hero[key].damage) assert.ok(game.bossHp < hp)
       else assert.ok(game.frozenUntil > until[0] || game.vulnerableUntil > until[1] || game.shieldUntil > until[2])
@@ -162,6 +165,7 @@ for (const hero of Object.values(HEROES)) {
     }
     game.start(0)
     game.bossHp = hero.ultimate.damage ?? hero.attack.damage
+    game.superEnergy = COMBAT.SUPER_MAX_ENERGY
     if (hero.ultimate.damage) combo(game, G.FIST, G.OPEN_PALM, 0)
     else game.acceptGesture(G.FIST, 0)
     assert.equal(game.state, GAME_STATES.VICTORY)
@@ -174,16 +178,19 @@ for (const hero of Object.values(HEROES)) {
   })
 }
 
-test('time collapse has strong damage, a ten-second cooldown, and combo feedback', () => {
+test('time collapse deals strong damage, freezes time, and requires recharge', () => {
   const game = new CombatGame('AERIS')
   game.start(0)
+  game.superEnergy = COMBAT.SUPER_MAX_ENERGY
   combo(game, G.FIST, G.OPEN_PALM, 0)
   assert.equal(game.bossHp, COMBAT.BOSS_HP - AERIS.COLLAPSE_DAMAGE)
   assert.equal(game.feedback.kind, 'overdrive')
+  assert.equal(game.frozenUntil, AERIS.COLLAPSE_FREEZE_MS)
   release(game, 1)
   combo(game, G.OPEN_PALM, G.FIST, AERIS.COLLAPSE_COOLDOWN_MS - 1)
   assert.equal(game.stats.combos, 1)
   release(game, AERIS.COLLAPSE_COOLDOWN_MS)
+  game.superEnergy = COMBAT.SUPER_MAX_ENERGY
   combo(game, G.OPEN_PALM, G.FIST, AERIS.COLLAPSE_COOLDOWN_MS + 1)
   assert.equal(game.stats.combos, 2)
 })
@@ -201,6 +208,8 @@ test('retry and hero changes clear all old effects, cooldowns, and gesture latch
     assert.equal(game.bossHp, COMBAT.BOSS_HP)
     assert.equal(game.playerHp, COMBAT.PLAYER_HP)
     assert.equal(game.score, 0)
+    assert.equal(game.superEnergy, 0)
+    game.superEnergy = COMBAT.SUPER_MAX_ENERGY
     combo(game, G.FIST, G.OPEN_PALM, 101)
     combo(game, G.OPEN_PALM, G.OPEN_PALM, 102)
     combo(game, G.FIST, G.FIST, 103)

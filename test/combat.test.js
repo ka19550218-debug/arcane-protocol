@@ -115,11 +115,12 @@ test('dual pulse takes priority over both individual fists and a held combo cann
   assert.equal(game.score, 2 * COMBAT.DUAL_PULSE_SCORE)
 })
 
-test('overdrive works in either hand order, respects its cooldown, and suppresses single-hand actions', () => {
+test('mixed-hand Super works in either order, requires charge, and suppresses single-hand actions', () => {
   assert.equal(detectCombo(GESTURES.FIST, GESTURES.OPEN_PALM), COMBOS.OVERDRIVE)
   assert.equal(detectCombo(GESTURES.OPEN_PALM, GESTURES.FIST), COMBOS.OVERDRIVE)
   const game = new CombatGame()
   game.start(0)
+  game.superEnergy = COMBAT.SUPER_MAX_ENERGY
   game.acceptHands({ LEFT: GESTURES.FIST, RIGHT: GESTURES.OPEN_PALM }, 0)
   assert.equal(game.bossHp, COMBAT.BOSS_HP - COMBAT.OVERDRIVE_DAMAGE)
   assert.equal(game.score, COMBAT.OVERDRIVE_SCORE)
@@ -128,6 +129,7 @@ test('overdrive works in either hand order, respects its cooldown, and suppresse
   game.acceptHands({ LEFT: GESTURES.OPEN_PALM, RIGHT: GESTURES.FIST }, 200)
   assert.equal(game.bossHp, COMBAT.BOSS_HP - COMBAT.OVERDRIVE_DAMAGE)
   game.acceptHands({ LEFT: GESTURES.NONE, RIGHT: GESTURES.NONE }, 7100)
+  game.superEnergy = COMBAT.SUPER_MAX_ENERGY
   game.acceptHands({ LEFT: GESTURES.OPEN_PALM, RIGHT: GESTURES.FIST }, 7101)
   assert.equal(game.bossHp, COMBAT.BOSS_HP - 2 * COMBAT.OVERDRIVE_DAMAGE)
   assert.equal(game.score, 2 * COMBAT.OVERDRIVE_SCORE)

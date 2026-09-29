@@ -10,6 +10,7 @@ export const FINGER_STATE_THRESHOLDS = Object.freeze({
   FIST_IDEAL_TIP_EXTENSION_PALM_RATIO: 0.1,
   FIST_LOW_QUALITY_TIP_EXTENSION_PALM_RATIO: 0.6,
   MIN_GEOMETRY_LENGTH: 0.001,
+  V_SIGN_MIN_SEPARATION_PALM_RATIO: 0.3,
   THUMB_EXTENDED_JOINT_ANGLE: 155,
   THUMB_CURLED_JOINT_ANGLE: 140,
   THUMB_CURLED_TIP_TO_BASE_RATIO: 1.35,
@@ -20,6 +21,12 @@ const FINGERS = {
   MIDDLE: [9, 10, 11, 12],
   RING: [13, 14, 15, 16],
   PINKY: [17, 18, 19, 20],
+}
+
+// Screen-plane spread avoids mistaking depth noise for two separated fingers.
+export function getVSignSeparation(hand) {
+  return distance(hand[8], hand[12], false) /
+    Math.max(distance(hand[5], hand[17], false), FINGER_STATE_THRESHOLDS.MIN_GEOMETRY_LENGTH)
 }
 
 export function getFingerStates(hand) {

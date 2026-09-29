@@ -61,7 +61,7 @@ h1 span { color: #5ce9f2; }
 .shield-active .fighter-player::before, .shield-active .fighter-player::after { box-shadow: 0 0 20px #66f9e9; }
 .full-barrier-active .fighter-player { filter: drop-shadow(0 0 32px #66f9e9); }
 .shield-status.full-barrier-active { border-color: #9fffe8; box-shadow: 0 0 12px #66f9e955; }
-.boss-hit .fighter-warden { filter: drop-shadow(0 0 28px #fff); }
+.boss-hit .fighter-boss { filter: drop-shadow(0 0 28px #fff); }
 .dual-pulse-effect .arena::before, .overdrive-effect .arena::before { position: absolute; z-index: 1; inset: 0; pointer-events: none; content: ''; animation: combo-flash 550ms ease-out both; }
 .dual-pulse-effect .arena::before { background: radial-gradient(circle at 65% 48%, #65f6ff77, transparent 45%); }
 .overdrive-effect .arena::before { background: radial-gradient(circle at 65% 48%, #ffcf76bb, #65f6ff55 35%, transparent 70%); }
@@ -163,7 +163,7 @@ h1 span { color: #5ce9f2; }
 .combat-status { min-height: 30px; margin: 0; padding: 8px; color: #c5acff; font-size: 11px; font-weight: 700; text-align: center; }
 .time-frozen .arena { box-shadow: inset 0 0 65px #a68aee55; }
 .time-frozen .warning-panel { border-color: #c5acff; background: #211c38ee; }
-.boss-hacked .fighter-warden { color: #a0f6b7; }
+.boss-hacked .fighter-boss { color: #a0f6b7; }
 .combat-feedback[data-kind="freeze"] { color: #c5acff; }
 .combat-feedback[data-kind="hack"] { color: #a0f6b7; }
 .echo-message { display: grid; gap: 15px; width: min(610px, 100%); margin-top: 35px; padding: 26px 30px; border-left: 3px solid #68e1e8; background: #0c1b2ccf; text-align: left; box-shadow: 0 0 27px #4bd3df12; }
@@ -180,7 +180,28 @@ h1 span { color: #5ce9f2; }
 .result-screen.is-defeat h2 span { color: #ff8ca0; }
 .result-screen.is-defeat .result-summary { border-color: #cd526b; background: #31151fc7; }
 .result-screen.is-defeat .result-summary > strong { color: #ffacb9; }
-.teaser-screen h2 span { color: #ffcf76; }
+
+
+/* M9 transmissions use the same panels and leave the tracking loop untouched. */
+.sequence-screen h2 { overflow-wrap: anywhere; }
+.story-warning h2, .story-warning .screen-kicker { color: #ff9aaa; }
+.story-corrupt .echo-message { border-color: #d59bff; }
+.story-corrupt .echo-message strong { color: #d59bff; }
+.story-corrupt h2 { animation: story-glitch 420ms steps(2, end) 1; }
+@keyframes story-glitch { 30% { transform: translateX(2px); text-shadow: -3px 0 #d59bff; } 70% { transform: translateX(-2px); text-shadow: 3px 0 #65f6ff; } }
+.story-progress { display: grid; gap: 12px; width: min(510px, 100%); margin-top: 30px; font-family: monospace; }
+.story-progress > span { color: #b8cad7; font-size: 13px; letter-spacing: .15em; }
+.story-progress > strong { color: #78f6de; font-size: 42px; }
+.story-progress .confirmation-meter { width: 100%; margin: 0; }
+.story-progress p { min-height: 18px; margin: 0; color: #ffcf76; font-size: 13px; }
+.fighter-echo { color: #d59bff; filter: drop-shadow(0 0 20px #ac62e588); }
+.fighter-echo::before { top: 24px; width: 100px; height: 100px; border-radius: 50%; border-style: dashed; }
+.fighter-echo::after { top: 44px; width: 128px; height: 128px; border: 2px solid currentColor; background: #231238; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.fighter-echo .fighter-core { top: 92px; width: 33px; height: 33px; border-radius: 3px; transform: rotate(45deg); }
+.encounter-echo .arena { background: radial-gradient(ellipse at 70% 50%, #362049, #111426 65%); }
+.encounter-echo .boss-track span { background: linear-gradient(90deg, #9253cd, #e2b3ff); }
+.encounter-echo .boss-status .stat-label span { color: #d59bff; }
+@media (prefers-reduced-motion: reduce) { .story-corrupt h2 { animation: none; } }
 
 /* Keep every gesture target visible on common 720p/768p laptop screens. */
 @media (min-width: 801px) and (max-height: 850px) {
@@ -195,6 +216,8 @@ h1 span { color: #5ce9f2; }
   .screen-actions .gesture-button { min-height: 48px; }
   .intro-transmission, .connection-grid, .hero-grid, .tutorial-actions, .echo-message, .result-summary { margin-top: 22px; }
   .result-summary { padding: 18px; gap: 12px; }
+  .briefing-screen .success-seal { margin-top: 20px; padding: 14px 20px; font-size: 23px; }
+  .briefing-screen .echo-message { gap: 9px; padding: 18px 22px; }
   .tutorial-card { min-height: 125px; padding: 14px 10px; }
   .hero-card { padding: 18px 12px; min-height: 170px; }
   .tracking-panel { padding: 12px; }
@@ -206,3 +229,31 @@ h1 span { color: #5ce9f2; }
 @media (max-width: 800px) { #app { padding: 15px; } .game-layout { grid-template-columns: 1fr; } .tracking-panel { max-width: 420px; width: 100%; margin: 0 auto; } .stage-frame, .main-stage, .story-screen { min-height: 500px; } .arena { min-height: 330px; } }
 @media (max-width: 560px) { .connection-grid, .tutorial-actions, .hero-grid { grid-template-columns: 1fr; } .story-screen { padding: 28px 20px; } .hero-card { min-height: 130px; } .tutorial-card { min-height: 115px; } .combo-demo { display: grid; grid-template-columns: 1fr; } }
 @media (max-width: 480px) { .combat-panel { padding: 12px; } .fighter { transform: scale(.8); } .fighter-warden { transform: scale(.9); } .combat-topline { font-size: 9px; } .warning-panel { top: 10px; } .arena { min-height: 300px; } }
+
+/* M8.5: persistent combat controls and charged Super. */
+.combat-controls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.combat-controls p { display: grid; gap: 6px; margin: 0; padding: 10px 8px; border: 1px solid #2d4560; background: #101e30; }
+.combat-controls span { color: #a8bdcc; font-size: 10px; }
+.combat-controls strong { color: #d4ecff; font-size: 11px; }
+.super-meter { width: 100%; margin: 12px 0; padding: 12px; border: 1px solid #615081; background: #201c32; }
+.super-meter .stat-label { gap: 12px; color: #cbb5ff; font-size: 12px; }
+.super-track { margin-top: 8px; }
+.super-track > span { background: linear-gradient(90deg, #9566ec, #c8a2ff); transition: width .2s ease; }
+.super-meter.is-ready { border-color: #b4ffdf; background: #173631; box-shadow: 0 0 16px #73eec533; }
+.super-meter.is-ready .stat-label { color: #b4ffdf; }
+.super-meter.is-ready .super-track > span { background: #73eec5; }
+@media (max-width: 700px) { .combat-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 801px) and (max-height: 850px) {
+  .combat-panel { padding: 14px; }
+  .combat-topline { padding-bottom: 10px; }
+  .boss-status { margin: 12px 0; }
+  .arena { min-height: 240px; }
+  .fighters { margin-top: 6px; padding-bottom: 12px; }
+  .fighter { height: 220px; transform: scale(.8); transform-origin: center bottom; }
+  .combat-controls { margin-top: 8px; }
+  .combat-controls p { padding: 8px; }
+  .combat-panel .super-meter { margin: 8px 0; padding: 9px; }
+  .combat-feedback { min-height: 38px; padding: 10px; font-size: 11px; }
+  .combat-status { min-height: 22px; padding: 4px; }
+  .combat-bottomline { margin-top: 10px; }
+}

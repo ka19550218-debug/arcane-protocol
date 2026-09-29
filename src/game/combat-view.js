@@ -1,8 +1,7 @@
 import { COMBAT, GAME_STATES } from './combat.js'
-import { abilityLegend } from './heroes.js'
 
 export class CombatView {
-  constructor({ root, shield }) {
+  constructor({ root, shield, scoreOffset = 0 }) {
     this.root = root
     this.playerHp = root.querySelector('[data-player-hp]')
     this.playerBar = root.querySelector('[data-player-bar]')
@@ -15,17 +14,29 @@ export class CombatView {
     this.warningCountdown = root.querySelector('[data-warning-countdown]')
     this.feedback = root.querySelector('[data-combat-feedback]')
     this.status = root.querySelector('[data-combat-status]')
+    this.superMeter = root.querySelector('[data-super-meter]')
+    this.superLabel = root.querySelector('[data-super-label]')
+    this.superValue = root.querySelector('[data-super-value]')
+    this.superBar = root.querySelector('[data-super-bar]')
+    this.superProgress = root.querySelector('[data-super-progress]')
     this.shield = shield
+    this.scoreOffset = scoreOffset
   }
 
   render(game, now) {
     setText(this.playerHp, `${game.playerHp} / ${COMBAT.PLAYER_HP}`)
     this.playerBar.style.width = `${game.playerHp}%`
-    setText(this.bossHp, `${game.bossHp} / ${COMBAT.BOSS_HP}`)
-    this.bossBar.style.width = `${game.bossHp / COMBAT.BOSS_HP * 100}%`
-    setText(this.score, game.score.toLocaleString())
+    setText(this.bossHp, `${game.bossHp} / ${game.boss.hp}`)
+    this.bossBar.style.width = `${game.bossHp / game.boss.hp * 100}%`
+    setText(this.score, (game.score + this.scoreOffset).toLocaleString())
 
     const hero = game.hero
+    const superReady = game.superEnergy === COMBAT.SUPER_MAX_ENERGY
+    this.superMeter.classList.toggle('is-ready', superReady)
+    setText(this.superLabel, superReady ? `SUPER READY ✌️ · ${hero.ultimate.name}` : `SUPER · ${hero.ultimate.name}`)
+    setText(this.superValue, `${game.superEnergy}%`)
+    this.superBar.style.width = `${game.superEnergy}%`
+    this.superProgress.setAttribute('aria-valuenow', String(game.superEnergy))
     const active = game.state === GAME_STATES.COMBAT
     const frozen = active && now < game.frozenUntil
     const seconds = (until) => `${(Math.max(0, until - now) / 1000).toFixed(1)}s`
@@ -33,7 +44,6 @@ export class CombatView {
     if (frozen) effects.push(`${game.freezeLabel} · PAUSED ${seconds(game.frozenUntil)}`)
     if (active && now < game.disruptedUntil) effects.push(`EMP DISRUPTION ${seconds(game.disruptedUntil)}`)
     if (active && now < game.vulnerableUntil) effects.push(`SYSTEM HACK ×${hero.ultimate.multiplier} · ${seconds(game.vulnerableUntil)}`)
-    effects.push(`${hero.ultimate.name}: ${now < game.nextOverdriveAt ? seconds(game.nextOverdriveAt) : 'READY'}`)
     setText(this.status, effects.join(' · '))
     this.root.classList.toggle('time-frozen', frozen)
     this.root.classList.toggle('boss-hacked', active && now < game.vulnerableUntil)
@@ -41,16 +51,22 @@ export class CombatView {
     const attack = game.attack
     this.warning.hidden = !attack
     if (attack) {
-      setText(this.warningTitle, frozen ? game.freezeLabel : attack.type === 'ENERGY_BLAST' ? 'ENERGY BLAST' : 'SWEEP ATTACK')
-      setText(this.warningInstruction, attack.type === 'ENERGY_BLAST'
-        ? hero.defense.effect === 'freeze' ? 'OPEN PALM TO PAUSE · ATTACK RESUMES' : 'OPEN PALM TO BLOCK'
-        : `${hero.dodge} ${attack.direction === 'SWIPE_LEFT' ? 'LEFT' : 'RIGHT'}`)
+      setText(this.warningTitle, frozen ? `${attack.label} · ${game.freezeLabel}` : attack.label)
+      let instruction = `${hero.dodge} ${attack.direction === 'SWIPE_LEFT' ? 'LEFT' : 'RIGHT'}`
+      if (attack.type === 'ENERGY_BLAST') {
+        instruction = hero.defense.effect === 'freeze'
+          ? 'PALM / 2 PALMS TO PAUSE · ATTACK RESUMES'
+          : attack.impactAt - now > hero.defense.durationMs
+            ? 'OPEN PALM AT 2.0s TO BLOCK'
+            : 'OPEN PALM TO BLOCK'
+      }
+      setText(this.warningInstruction, instruction)
       setText(this.warningCountdown, `${(Math.max(0, attack.impactAt - now) / 1000).toFixed(1)}s`)
       this.warning.classList.toggle('is-defended', attack.defended)
     }
 
     const feedbackVisible = now < game.feedback.until || game.state === GAME_STATES.VICTORY || game.state === GAME_STATES.DEFEAT
-    setText(this.feedback, feedbackVisible ? game.feedback.message : abilityLegend(hero).slice(0, 3).map(([gesture, name]) => `${gesture}: ${name}`).join(' · '))
+    setText(this.feedback, feedbackVisible ? game.feedback.message : 'BASIC ATTACKS CHARGE SUPER · RELEASE EACH POSE TO REPEAT')
     this.feedback.dataset.kind = feedbackVisible ? game.feedback.kind : 'neutral'
     this.root.classList.toggle('shield-active', game.state === GAME_STATES.COMBAT && now < game.shieldUntil)
     this.root.classList.toggle('full-barrier-active', game.state === GAME_STATES.COMBAT && now < game.fullBarrierUntil)

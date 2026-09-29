@@ -1,6 +1,7 @@
 import { GESTURES } from '../gesture-engine.js'
 import { COMBAT } from './combat-settings.js'
 import { getHero } from './heroes.js'
+import { getBoss } from './bosses.js'
 
 export { COMBAT } from './combat-settings.js'
 
@@ -28,12 +29,13 @@ export function detectCombo(left, right) {
 }
 
 export class CombatGame {
-  constructor(heroId = 'VEX') {
-    this.reset(heroId)
+  constructor(heroId = 'VEX', bossId = 'WARDEN') {
+    this.reset(heroId, bossId)
   }
 
-  reset(heroId = this.hero?.id ?? 'VEX') {
+  reset(heroId = this.hero?.id ?? 'VEX', bossId = 'WARDEN') {
     this.hero = getHero(heroId)
+    this.boss = getBoss(bossId)
     this.handInputs = Object.fromEntries(['SINGLE', 'LEFT', 'RIGHT'].map((side) => [side, {
       lastGesture: GESTURES.NONE,
       lastStaticAction: null,
@@ -42,8 +44,9 @@ export class CombatGame {
     this.lastCombo = null
     this.state = GAME_STATES.READY
     this.playerHp = COMBAT.PLAYER_HP
-    this.bossHp = COMBAT.BOSS_HP
+    this.bossHp = this.boss.hp
     this.score = 0
+    this.superEnergy = 0
     this.stats = { attacks: 0, blocks: 0, dodges: 0, combos: 0 }
     this.attack = null
     this.attackCount = 0
@@ -66,12 +69,32 @@ export class CombatGame {
     this.feedback = { message: 'POINT at START COMBAT to begin', kind: 'neutral', until: Infinity }
   }
 
-  start(now, heroId = this.hero.id) {
-    this.reset(heroId)
+  start(now, heroId = this.hero.id, bossId = 'WARDEN') {
+    this.reset(heroId, bossId)
     this.lastClockAt = now
     this.state = GAME_STATES.COMBAT
-    this.nextAttackAt = now + COMBAT.FIRST_ATTACK_DELAY_MS
-    this.showFeedback('ENGAGE THE WARDEN', 'neutral', now)
+    this.nextAttackAt = now + this.boss.firstAttackDelayMs
+    this.showFeedback(`ENGAGE ${this.boss.name}`, 'neutral', now)
+  }
+
+  stop() {
+    if (this.state === GAME_STATES.COMBAT) this.state = GAME_STATES.READY
+    this.attack = null
+    this.nextAttackAt = Infinity
+    this.disruptedUntil = 0
+    this.vulnerableUntil = 0
+    this.frozenUntil = 0
+    this.freezeLabel = ''
+    this.shieldUntil = 0
+    this.fullBarrierUntil = 0
+    this.shieldStartedAt = 0
+    this.fullBarrierStartedAt = 0
+    for (const deadline of ['nextPulseAt', 'nextDualPulseAt', 'nextFullBarrierAt', 'nextOverdriveAt', 'nextShieldAt', 'nextDodgeAt']) {
+      this[deadline] = 0
+    }
+    if (this.state === GAME_STATES.READY) {
+      this.feedback = { message: '', kind: 'neutral', until: 0 }
+    }
   }
 
   acceptHands(hands, now) {
@@ -91,6 +114,13 @@ export class CombatGame {
     this.lastCombo = null
     const swipe = [left, right].some((gesture) =>
       gesture === GESTURES.SWIPE_LEFT || gesture === GESTURES.SWIPE_RIGHT)
+    if (!swipe && [left, right].includes(GESTURES.V_SIGN)) {
+      // One Super attempt per frame, even when both hands form V_SIGN together.
+      const side = left === GESTURES.V_SIGN ? 'LEFT' : 'RIGHT'
+      this.acceptGesture(GESTURES.V_SIGN, now, side)
+      this.acceptGesture(side === 'LEFT' ? right : left, now, side === 'LEFT' ? 'RIGHT' : 'LEFT', true)
+      return
+    }
     this.acceptGesture(left, now, 'LEFT', swipe && left !== GESTURES.SWIPE_LEFT && left !== GESTURES.SWIPE_RIGHT)
     this.acceptGesture(right, now, 'RIGHT', swipe && right !== GESTURES.SWIPE_LEFT && right !== GESTURES.SWIPE_RIGHT)
   }
@@ -123,13 +153,17 @@ export class CombatGame {
     if (suppress) return
     if (gesture === GESTURES.FIST) this.pulseShot(now)
     else if (gesture === GESTURES.OPEN_PALM) this.raiseShield(now)
+    else if (gesture === GESTURES.V_SIGN) this.activateSuper(now)
   }
 
   activateCombo(combo, now) {
+    if (combo === COMBOS.OVERDRIVE) {
+      if (this.activateSuper(now)) this.stats.combos += 1
+      return
+    }
     const slot = {
       [COMBOS.DUAL_PULSE]: ['dual', 'nextDualPulseAt', COMBAT.DUAL_PULSE_SCORE, 'dual-pulse'],
       [COMBOS.FULL_BARRIER]: ['barrier', 'nextFullBarrierAt', 0, 'shield'],
-      [COMBOS.OVERDRIVE]: ['ultimate', 'nextOverdriveAt', COMBAT.OVERDRIVE_SCORE, 'overdrive'],
     }[combo]
     if (!slot) return
     const [key, cooldown, score, kind] = slot
@@ -137,17 +171,36 @@ export class CombatGame {
   }
 
   pulseShot(now) {
-    this.useAbility(this.hero.attack, 'nextPulseAt', COMBAT.PULSE_SCORE, 'hit', now)
+    if (this.useAbility(this.hero.attack, 'nextPulseAt', COMBAT.PULSE_SCORE, 'hit', now)) {
+      this.superEnergy = Math.min(COMBAT.SUPER_MAX_ENERGY,
+        Math.max(0, this.superEnergy + COMBAT.SUPER_ENERGY_PER_BASIC_ATTACK))
+    }
+  }
+
+  activateSuper(now) {
+    if (this.state !== GAME_STATES.COMBAT) return false
+    if (this.superEnergy < COMBAT.SUPER_MAX_ENERGY) {
+      this.showFeedback(`SUPER NOT READY · ${this.superEnergy}%`, 'neutral', now)
+      return false
+    }
+    // Energy replaces the old ultimate timer; both gesture shortcuts share it.
+    if (!this.useAbility(this.hero.ultimate, null, COMBAT.OVERDRIVE_SCORE, 'overdrive', now)) return false
+    this.superEnergy = 0
+    return true
   }
 
   useAbility(ability, cooldown, score, kind, now) {
     if (this.state !== GAME_STATES.COMBAT) return false
-    if (now < this[cooldown]) {
+    if (cooldown && now < this[cooldown]) {
       this.showFeedback(`${ability.name} RECHARGING`, 'neutral', now)
       return false
     }
-    this[cooldown] = now + ability.cooldownMs
+    if (cooldown) this[cooldown] = now + ability.cooldownMs
     if (ability.effect === 'damage') {
+      if (ability.freezeMs) {
+        this.frozenUntil = Math.max(this.frozenUntil, now + ability.freezeMs)
+        this.freezeLabel = ability.name
+      }
       if (ability.disruptMs) this.disruptedUntil = Math.max(this.disruptedUntil, now + ability.disruptMs)
       this.damageBoss(ability.damage, score, ability.name, kind, now)
     } else if (ability.effect === 'shield' || ability.effect === 'barrier') {
@@ -160,8 +213,10 @@ export class CombatGame {
       }
       this.showFeedback(`${ability.name} ACTIVE`, 'shield', now)
     } else if (ability.effect === 'hack') {
+      this.damageBoss(ability.damage, score, ability.name, kind, now)
+      if (this.state !== GAME_STATES.COMBAT) return true
       this.vulnerableUntil = now + ability.durationMs
-      this.showFeedback(`${ability.name} · DAMAGE ×${ability.multiplier}`, 'hack', now)
+      this.showFeedback(`${ability.name} −${ability.damage} · DAMAGE ×${ability.multiplier}`, 'hack', now)
     } else if (ability.effect === 'freeze') {
       this.frozenUntil = Math.max(this.frozenUntil, now + ability.durationMs)
       this.freezeLabel = ability.name
@@ -181,6 +236,7 @@ export class CombatGame {
   }
 
   damageBoss(damage, score, label, kind, now) {
+    if (this.state !== GAME_STATES.COMBAT) return
     if (now < this.vulnerableUntil) damage = Math.round(damage * this.hero.ultimate.multiplier)
     this.stats.attacks += 1
     this.bossHp = Math.max(0, this.bossHp - damage)
@@ -189,8 +245,8 @@ export class CombatGame {
     if (this.bossHp === 0) {
       this.score += COMBAT.VICTORY_SCORE
       this.state = GAME_STATES.VICTORY
-      this.attack = null
-      this.showFeedback(`THE WARDEN DEFEATED  +${COMBAT.VICTORY_SCORE}`, 'victory', now)
+      this.stop()
+      this.showFeedback(`${this.boss.name} DEFEATED  +${COMBAT.VICTORY_SCORE}`, 'victory', now)
     }
   }
 
@@ -199,6 +255,7 @@ export class CombatGame {
   }
 
   dodge(gesture, now) {
+    if (this.state !== GAME_STATES.COMBAT) return
     if (now < this.nextDodgeAt) return
     this.nextDodgeAt = now + COMBAT.DODGE_COOLDOWN_MS
     if (this.attack?.type !== 'SWEEP' || now >= this.attack.impactAt) {
@@ -227,21 +284,24 @@ export class CombatGame {
   }
 
   beginAttack(now) {
-    const isEnergyBlast = this.attackCount % 2 === 0
-    const direction = this.attackCount % 4 === 1 ? GESTURES.SWIPE_LEFT : GESTURES.SWIPE_RIGHT
+    if (this.state !== GAME_STATES.COMBAT) return
+    const pattern = this.boss.patterns[this.attackCount % this.boss.patterns.length]
+    // Each cycle contains one sweep, so directions alternate for either boss.
+    const sweepIndex = Math.floor(this.attackCount / this.boss.patterns.length)
     this.attack = {
-      type: isEnergyBlast ? 'ENERGY_BLAST' : 'SWEEP',
-      direction: isEnergyBlast ? null : direction,
-      impactAt: now + (isEnergyBlast ? COMBAT.ENERGY_WARNING_MS : COMBAT.SWEEP_WARNING_MS),
+      ...pattern,
+      direction: pattern.type === 'SWEEP' ? (sweepIndex % 2 === 0 ? GESTURES.SWIPE_LEFT : GESTURES.SWIPE_RIGHT) : null,
+      impactAt: now + pattern.warningMs,
       defended: false,
     }
     this.attackCount += 1
   }
 
   resolveAttack(now) {
+    if (this.state !== GAME_STATES.COMBAT || !this.attack) return
     const attack = this.attack
     this.attack = null
-    this.nextAttackAt = now + COMBAT.BETWEEN_ATTACKS_MS
+    this.nextAttackAt = now + this.boss.betweenAttacksMs
 
     if (this.fullBarrierStartedAt <= attack.impactAt && attack.impactAt < this.fullBarrierUntil) {
       this.stats.blocks += 1
@@ -262,11 +322,12 @@ export class CombatGame {
       return
     }
 
-    const damage = attack.type === 'ENERGY_BLAST' ? COMBAT.ENERGY_BLAST_DAMAGE : COMBAT.SWEEP_DAMAGE
+    const damage = attack.damage
     this.playerHp = Math.max(0, this.playerHp - damage)
     this.showFeedback(`HIT  −${damage} HP`, 'damage', now)
     if (this.playerHp === 0) {
       this.state = GAME_STATES.DEFEAT
+      this.stop()
       this.showFeedback(`${this.hero.id} DEFEATED`, 'defeat', now)
     }
   }

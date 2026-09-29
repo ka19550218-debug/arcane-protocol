@@ -1,7 +1,9 @@
 import { GESTURES } from './gesture-engine.js'
 import { createGestureButton } from './gesture-navigation.js'
-import { detectCombo } from './game/combat.js'
+import { COMBAT, detectCombo } from './game/combat.js'
 import { HEROES, getHero, abilityLegend } from './game/heroes.js'
+import { getBoss } from './game/bosses.js'
+import { ECHO_DIALOGUE, HERO_INTERRUPTS, STORY_SEQUENCES } from './story.js'
 
 export const APP_STATES = Object.freeze({
   INTRO: 'INTRO',
@@ -10,8 +12,14 @@ export const APP_STATES = Object.freeze({
   TUTORIAL: 'TUTORIAL',
   HERO_SELECT: 'HERO_SELECT',
   BRIEFING: 'BRIEFING',
-  COMBAT: 'COMBAT',
+  WARDEN_COMBAT: 'WARDEN_COMBAT',
   RESULT: 'RESULT',
+  STORY_REVEAL: 'STORY_REVEAL',
+  ECHO_BRIEFING: 'ECHO_BRIEFING',
+  ECHO_COMBAT: 'ECHO_COMBAT',
+  RESTORATION: 'RESTORATION',
+  FINAL_RESULT: 'FINAL_RESULT',
+  ENDING: 'ENDING',
 })
 
 const CALIBRATION_STEPS = [
@@ -24,22 +32,30 @@ const TUTORIAL_ACTIONS = [
   { id: 'PULSE', gestures: [GESTURES.FIST], title: 'FIST', ability: 'PULSE SHOT' },
   { id: 'SHIELD', gestures: [GESTURES.OPEN_PALM], title: 'OPEN PALM', ability: 'ENERGY SHIELD' },
   { id: 'DODGE', gestures: [GESTURES.SWIPE_LEFT, GESTURES.SWIPE_RIGHT], title: 'SWIPE LEFT / RIGHT', ability: 'DODGE' },
+  { id: 'SUPER', gestures: [GESTURES.V_SIGN], title: '✌️ V SIGN', ability: 'SUPER · OVERDRIVE' },
 ]
 
-const CALIBRATION_HOLD_MS = 550
+export const FLOW_TIMING = Object.freeze({
+  CALIBRATION_HOLD_MS: 550,
+  CONFIRMATION_MS: 800,
+  COMPLETE_MS: 1000,
+  CAMERA_ONLINE_MS: 900,
+  STORY_MIN_MS: 1800,
+  STORY_WORD_MS: 180,
+  STORY_MAX_MS: 6500,
+  RESULT_MS: 5000,
+})
 const MAX_SAMPLE_GAP_MS = 250
 const ACTION_STATES = {
-  ENTER_CAMERA: APP_STATES.INTRO,
-  BEGIN_CALIBRATION: APP_STATES.CAMERA,
-  CALIBRATION_CONTINUE: APP_STATES.CALIBRATION,
-  TUTORIAL_CONTINUE: APP_STATES.TUTORIAL,
   SELECT_VEX: APP_STATES.HERO_SELECT,
   SELECT_NEX: APP_STATES.HERO_SELECT,
   SELECT_AERIS: APP_STATES.HERO_SELECT,
   BEGIN_MISSION: APP_STATES.BRIEFING,
   RETRY: APP_STATES.RESULT,
-  RESULT_CONTINUE: APP_STATES.RESULT,
-  MAIN_MENU: APP_STATES.RESULT,
+  ENGAGE_ECHO: APP_STATES.ECHO_BRIEFING,
+  RETRY_FINAL: APP_STATES.FINAL_RESULT,
+  RETRY_STORY: APP_STATES.ENDING,
+  MAIN_MENU: [APP_STATES.RESULT, APP_STATES.FINAL_RESULT, APP_STATES.ENDING],
 }
 
 export class GameFlow {
@@ -50,14 +66,20 @@ export class GameFlow {
     this.state = APP_STATES.INTRO
     this.camera = { state: 'connecting', message: 'CONNECTING CAMERA' }
     this.trackingReady = false
+    this.pendingTransition = null
+    this.cameraReadyAt = null
     this.calibrationStep = 0
     this.calibrationComplete = false
     this.calibrationHoldStartedAt = null
     this.calibrationHand = null
     this.lastCalibrationSampleAt = null
     this.tutorialComplete = new Set()
+    this.tutorialConfirmed = null
     this.selectedHero = 'VEX'
     this.result = null
+    this.wardenResult = null
+    this.storyStep = 0
+    this.storyStartedAt = performance.now()
     this.render()
   }
 
@@ -71,30 +93,32 @@ export class GameFlow {
     if (this.state === APP_STATES.INTRO || this.state === APP_STATES.CAMERA) this.render()
   }
 
-  setState(nextState) {
+  get isCombat() {
+    return this.state === APP_STATES.WARDEN_COMBAT || this.state === APP_STATES.ECHO_COMBAT
+  }
+
+  get bossId() {
+    return this.state === APP_STATES.ECHO_COMBAT ? 'ECHO' : 'WARDEN'
+  }
+
+  get scoreBeforeBattle() {
+    return this.bossId === 'ECHO' ? this.wardenResult?.score ?? 0 : 0
+  }
+
+  setState(nextState, now = performance.now()) {
+    this.pendingTransition = null
+    this.tutorialConfirmed = null
+    this.cameraReadyAt = null
     this.state = nextState
+    this.storyStep = 0
+    this.storyStartedAt = now
     this.render()
     this.onStateChange?.(nextState)
   }
 
   select(value) {
-    if (ACTION_STATES[value] !== this.state) return
+    if (![ACTION_STATES[value]].flat().includes(this.state)) return
     switch (value) {
-      case 'ENTER_CAMERA':
-        this.setState(APP_STATES.CAMERA)
-        break
-      case 'BEGIN_CALIBRATION':
-        if (this.trackingReady && this.camera.state === 'online') {
-          this.resetForMainMenu()
-          this.setState(APP_STATES.CALIBRATION)
-        }
-        break
-      case 'CALIBRATION_CONTINUE':
-        if (this.calibrationComplete) this.setState(APP_STATES.TUTORIAL)
-        break
-      case 'TUTORIAL_CONTINUE':
-        if (this.tutorialComplete.size === TUTORIAL_ACTIONS.length) this.setState(APP_STATES.HERO_SELECT)
-        break
       case 'SELECT_VEX':
       case 'SELECT_NEX':
       case 'SELECT_AERIS':
@@ -103,13 +127,25 @@ export class GameFlow {
         break
       case 'BEGIN_MISSION':
       case 'RETRY':
-        this.setState(APP_STATES.COMBAT)
+        this.result = null
+        this.wardenResult = null
+        this.setState(APP_STATES.WARDEN_COMBAT)
         break
-      case 'RESULT_CONTINUE':
-        if (this.result?.outcome === 'VICTORY') {
-          this.result.teaser = true
-          this.render()
-        }
+      case 'ENGAGE_ECHO':
+        if (this.storyStep !== STORY_SEQUENCES.ECHO_BRIEFING.length - 1 || !this.wardenResult) return
+        this.result = null
+        this.setState(APP_STATES.ECHO_COMBAT)
+        break
+      case 'RETRY_FINAL':
+        if (this.result?.outcome !== 'DEFEAT' || !this.wardenResult) return
+        this.result = null
+        this.setState(APP_STATES.ECHO_COMBAT)
+        break
+      case 'RETRY_STORY':
+        if (this.storyStep !== STORY_SEQUENCES.ENDING.length - 1) return
+        this.result = null
+        this.wardenResult = null
+        this.setState(APP_STATES.HERO_SELECT)
         break
       case 'MAIN_MENU':
         this.resetForMainMenu()
@@ -120,17 +156,110 @@ export class GameFlow {
 
   handleHands(hands, timestamp) {
     if (this.state === APP_STATES.CALIBRATION) return this.updateCalibration(hands, timestamp)
-    if (this.state === APP_STATES.TUTORIAL) return this.updateTutorial(hands)
+    if (this.state === APP_STATES.TUTORIAL) return this.updateTutorial(hands, timestamp)
     return false
   }
 
   showResult(outcome, score, stats) {
-    this.result = { outcome, score, heroId: this.selectedHero, teaser: false, ...(stats ? { stats: { ...stats } } : {}) }
-    this.setState(APP_STATES.RESULT)
+    // A completed encounter is committed once, before changing screens.
+    if (!this.isCombat || !['VICTORY', 'DEFEAT'].includes(outcome)) return
+    const bossId = this.bossId
+    const encounter = { outcome, score, heroId: this.selectedHero, bossId,
+      ...(stats ? { stats: { ...stats } } : {}) }
+    if (bossId === 'WARDEN') {
+      this.result = encounter
+      if (outcome === 'VICTORY') this.wardenResult = encounter
+      this.setState(outcome === 'VICTORY' ? APP_STATES.STORY_REVEAL : APP_STATES.RESULT)
+      return
+    }
+    this.result = { ...encounter, score: (this.wardenResult?.score ?? 0) + score }
+    if (stats && this.wardenResult?.stats) {
+      this.result.stats = Object.fromEntries(Object.keys(stats).map((key) =>
+        [key, this.wardenResult.stats[key] + stats[key]]))
+    }
+    this.setState(outcome === 'VICTORY' ? APP_STATES.RESTORATION : APP_STATES.FINAL_RESULT)
+  }
+
+  advanceStory(now = performance.now()) {
+    const sequence = STORY_SEQUENCES[this.state]
+    if (!sequence) return
+    if (this.storyStep < sequence.length - 1) {
+      this.storyStep += 1
+      this.storyStartedAt = now
+      this.render()
+      // A page within a state still needs a fresh POINT release before selection.
+      this.onStateChange?.(this.state)
+      return
+    }
+    const next = {
+      [APP_STATES.INTRO]: APP_STATES.CAMERA,
+      [APP_STATES.STORY_REVEAL]: APP_STATES.ECHO_BRIEFING,
+      [APP_STATES.RESTORATION]: APP_STATES.FINAL_RESULT,
+    }[this.state]
+    if (next) this.setState(next, now)
+  }
+
+  scheduleTransition(now, delay, action) {
+    this.pendingTransition = { at: now + delay, action }
+  }
+
+  update(now) {
+    if (this.pendingTransition && now >= this.pendingTransition.at) {
+      const { action } = this.pendingTransition
+      this.pendingTransition = null
+      action(now)
+      return
+    }
+    if (this.state === APP_STATES.CAMERA) {
+      if (this.camera.state !== 'online' || !this.trackingReady) {
+        this.cameraReadyAt = null
+        return
+      }
+      this.cameraReadyAt ??= now
+      if (now - this.cameraReadyAt >= FLOW_TIMING.CAMERA_ONLINE_MS) {
+        this.resetForMainMenu()
+        this.setState(APP_STATES.CALIBRATION, now)
+      }
+      return
+    }
+    if (this.state === APP_STATES.FINAL_RESULT && this.result?.outcome === 'VICTORY' &&
+      now >= this.storyStartedAt + FLOW_TIMING.RESULT_MS) {
+      this.setState(APP_STATES.ENDING, now)
+      return
+    }
+    this.updateStoryProgress(now)
+    const sequence = STORY_SEQUENCES[this.state]
+    if (!sequence) return
+    const last = this.storyStep === sequence.length - 1
+    // ENGAGE and the ending menu remain deliberate POINT + dwell choices.
+    if (last && [APP_STATES.ECHO_BRIEFING, APP_STATES.ENDING].includes(this.state)) return
+    const page = sequence[this.storyStep]
+    const words = [page.title, ...(page.lines ?? []), ...(page.dialogue ?? [])].join(' ').split(/\s+/).length
+    const readingMs = Math.min(FLOW_TIMING.STORY_MAX_MS,
+      Math.max(FLOW_TIMING.STORY_MIN_MS, words * FLOW_TIMING.STORY_WORD_MS))
+    const progressMs = page.progress
+      ? (page.progress.values.length - 1) * page.progress.stepMs + FLOW_TIMING.COMPLETE_MS : 0
+    if (now - this.storyStartedAt >= Math.max(readingMs, progressMs)) this.advanceStory(now)
+  }
+
+  updateStoryProgress(now) {
+    const progress = STORY_SEQUENCES[this.state]?.[this.storyStep]?.progress
+    if (!progress) return
+    const index = Math.min(progress.values.length - 1,
+      Math.max(0, Math.floor((now - this.storyStartedAt) / progress.stepMs)))
+    const value = progress.values[index]
+    const label = this.stage.querySelector('[data-story-progress]')
+    const meter = this.stage.querySelector('[data-story-meter]')
+    const status = this.stage.querySelector('[data-story-status]')
+    const percentage = `${String(value).padStart(progress.pad ? 2 : 1, '0')}%`
+    const message = index === progress.values.length - 1 ? progress.complete : 'CONNECTING...'
+    if (label && label.textContent !== percentage) label.textContent = percentage
+    if (meter && meter.style.width !== `${value}%`) meter.style.width = `${value}%`
+    if (status && status.textContent !== message) status.textContent = message
   }
 
   updateCalibration(hands, timestamp) {
-    if (this.calibrationComplete) return false
+    if (this.calibrationComplete || this.pendingTransition) return false
     const step = CALIBRATION_STEPS[this.calibrationStep]
     // Use the existing base classifier and stable output, never quality as a gate.
     // Requiring the same hand and continuous samples prevents stale poses from passing.
@@ -156,42 +285,66 @@ export class GameFlow {
     }
     this.calibrationHand = matchingHand
     this.lastCalibrationSampleAt = timestamp
-    const progress = Math.min((timestamp - this.calibrationHoldStartedAt) / CALIBRATION_HOLD_MS, 1)
+    const progress = Math.min((timestamp - this.calibrationHoldStartedAt) / FLOW_TIMING.CALIBRATION_HOLD_MS, 1)
     if (status) status.textContent = progress === 1 ? 'GESTURE CONFIRMED' : 'CONFIRMING STABLE GESTURE...'
     if (meter) meter.style.width = `${progress * 100}%`
 
     if (progress < 1) return false
-    this.calibrationStep += 1
     this.calibrationHoldStartedAt = null
-    if (this.calibrationStep === CALIBRATION_STEPS.length) this.calibrationComplete = true
-    this.render()
+    if (this.calibrationStep === CALIBRATION_STEPS.length - 1) {
+      this.calibrationComplete = true
+      this.render()
+      this.scheduleTransition(timestamp, FLOW_TIMING.COMPLETE_MS,
+        (now) => this.setState(APP_STATES.TUTORIAL, now))
+    } else {
+      this.scheduleTransition(timestamp, FLOW_TIMING.CONFIRMATION_MS, () => {
+        this.calibrationStep += 1
+        this.render()
+      })
+    }
     return true
   }
 
-  updateTutorial(hands) {
+  updateTutorial(hands, timestamp) {
+    if (this.pendingTransition) return false
     // A two-hand combo must not count as practicing its component one-hand actions.
     if (detectCombo(hands.LEFT?.gesture, hands.RIGHT?.gesture)) return false
-    const recognized = Object.values(hands).map((hand) => hand.gesture)
+    const action = TUTORIAL_ACTIONS.find((item) => !this.tutorialComplete.has(item.id))
+    if (!action) return false
+    const recognized = Object.values(hands).filter((hand) => hand.landmarks &&
+      hand.gesture === hand.debug.rawGesture).map((hand) => hand.gesture)
     const swipes = recognized.filter((gesture) => gesture === GESTURES.SWIPE_LEFT || gesture === GESTURES.SWIPE_RIGHT)
     const gestures = swipes.length ? swipes : recognized
-    const completed = TUTORIAL_ACTIONS.find((action) => (
-      !this.tutorialComplete.has(action.id) && action.gestures.some((gesture) => gestures.includes(gesture))
-    ))
-    if (!completed) return false
-    this.tutorialComplete.add(completed.id)
-    this.render()
+    if (!action.gestures.some((gesture) => gestures.includes(gesture))) return false
+    this.tutorialComplete.add(action.id)
+    this.renderTutorialConfirmation(action)
+    this.scheduleTransition(timestamp, FLOW_TIMING.CONFIRMATION_MS, (now) => {
+      this.tutorialConfirmed = null
+      if (this.tutorialComplete.size === TUTORIAL_ACTIONS.length) this.setState(APP_STATES.HERO_SELECT, now)
+      else this.render()
+    })
     return true
+  }
+
+  renderTutorialConfirmation(action) {
+    this.tutorialConfirmed = action
+    this.render()
+    const status = this.stage.querySelector('[data-tutorial-status]')
+    if (status) status.textContent = `${action.ability} CONFIRMED${action.id === 'SUPER' ? ' · TRAINING COMPLETE' : ''}`
   }
 
   resetForMainMenu() {
+    this.pendingTransition = null
     this.calibrationStep = 0
     this.calibrationComplete = false
     this.calibrationHoldStartedAt = null
     this.calibrationHand = null
     this.lastCalibrationSampleAt = null
     this.tutorialComplete.clear()
+    this.tutorialConfirmed = null
     this.selectedHero = 'VEX'
     this.result = null
+    this.wardenResult = null
   }
 
   render() {
@@ -202,7 +355,11 @@ export class GameFlow {
 
     switch (this.state) {
       case APP_STATES.INTRO:
-        this.renderIntro()
+      case APP_STATES.STORY_REVEAL:
+      case APP_STATES.ECHO_BRIEFING:
+      case APP_STATES.RESTORATION:
+      case APP_STATES.ENDING:
+        this.renderStory()
         break
       case APP_STATES.CAMERA:
         this.renderCamera()
@@ -219,40 +376,54 @@ export class GameFlow {
       case APP_STATES.BRIEFING:
         this.renderBriefing()
         break
-      case APP_STATES.COMBAT:
-        this.stage.innerHTML = combatMarkup(getHero(this.selectedHero))
+      case APP_STATES.WARDEN_COMBAT:
+      case APP_STATES.ECHO_COMBAT:
+        this.stage.innerHTML = combatMarkup(getHero(this.selectedHero), getBoss(this.bossId))
         break
       case APP_STATES.RESULT:
+      case APP_STATES.FINAL_RESULT:
         this.renderResult()
         break
     }
   }
 
-  renderIntro() {
-    const ready = this.trackingReady
+  renderStory() {
+    const sequence = STORY_SEQUENCES[this.state]
+    const page = sequence[this.storyStep]
+    const intro = this.state === APP_STATES.INTRO
+    const last = this.storyStep === sequence.length - 1
+    const speaker = page.heroInterrupt ? this.selectedHero : page.speaker
+    const dialogue = page.heroInterrupt ? [HERO_INTERRUPTS[this.selectedHero]] : page.dialogue
     this.stage.innerHTML = `
-      <section class="story-screen intro-screen" aria-labelledby="intro-title">
-        <p class="screen-kicker">ADMIT HACKATHON · MOTION 2026</p>
-        <h2 id="intro-title">ARCANE <span>PROTOCOL</span></h2>
-        <div class="intro-transmission" aria-label="Opening transmission">
-          <p>2057</p>
-          <p>THE NETWORK HAS FALLEN.</p>
-          <p>ONE SYSTEM REMAINS ONLINE.</p>
-        </div>
-        <p class="system-line ${this.camera.state}" role="status"></p>
-        <p class="screen-copy">${ready
-          ? 'Gesture tracking is online. Point at the control below and hold to enter.'
-          : 'Allow browser camera access. The protocol will unlock when hand tracking is ready.'}</p>
+      <section class="story-screen sequence-screen ${intro ? 'intro-screen' : ''} story-${page.tone ?? 'normal'}" aria-labelledby="story-title">
+        <p class="screen-kicker">${page.kicker}</p>
+        <h2 id="story-title">${page.title === 'ARCANE PROTOCOL' ? 'ARCANE <span>PROTOCOL</span>' : page.title}</h2>
+        ${page.lines ? `<div class="intro-transmission">${page.lines.map((line) => `<p>${line}</p>`).join('')}</div>` : ''}
+        ${dialogue ? `<div class="echo-message">${dialogue.map((line) => `<p><strong>${speaker}:</strong> ${line}</p>`).join('')}</div>` : ''}
+        ${page.progress ? `<div class="story-progress" aria-label="${page.progress.label}">
+          <span>${page.progress.label}</span><strong data-story-progress></strong>
+          <div class="confirmation-meter" aria-hidden="true"><span data-story-meter></span></div>
+          <p data-story-status role="status"></p></div>` : ''}
+        ${page.heroInterrupt ? `<p class="screen-copy">${getHero(this.selectedHero).defense.effect === 'freeze'
+          ? 'Palms pause attacks; they resume afterward. Strike during the pause. Swipe in the shown direction for DATA SWEEP.'
+          : 'Open palm blocks pulses. Swipe in the shown direction for DATA SWEEP. Time your shield near impact for CORRUPTION BURST.'}</p>` : ''}
+        ${intro ? `<p class="system-line ${this.camera.state}" role="status"></p>
+          <p class="screen-copy">${this.trackingReady ? 'Tracking online. Synchronization begins automatically.' : 'Allow browser camera access to enable POINT + dwell.'}</p>` : ''}
         <div class="screen-actions"></div>
       </section>`
-    this.stage.querySelector('.system-line').textContent = this.camera.message
-    this.appendAction('ENTER PROTOCOL', 'ENTER_CAMERA')
+    if (intro) this.stage.querySelector('.system-line').textContent = this.camera.message
+    if (last && this.state === APP_STATES.ENDING) {
+      this.appendAction('MAIN MENU', 'MAIN_MENU')
+      this.appendAction('RETRY STORY', 'RETRY_STORY')
+    } else if (last && this.state === APP_STATES.ECHO_BRIEFING) {
+      this.appendAction('ENGAGE', 'ENGAGE_ECHO')
+    }
+    this.updateStoryProgress(performance.now())
   }
 
   renderCamera() {
     const online = this.camera.state === 'online'
     const connecting = this.camera.state === 'connecting'
-    const canContinue = online && this.trackingReady
     this.stage.innerHTML = `
       <section class="story-screen camera-screen" aria-labelledby="camera-title">
         <p class="screen-kicker">CAMERA CONNECTION</p>
@@ -269,7 +440,6 @@ export class GameFlow {
         <div class="screen-actions"></div>
       </section>`
     this.stage.querySelector('.system-line').textContent = this.camera.message
-    this.appendAction('BEGIN CALIBRATION', 'BEGIN_CALIBRATION', !canContinue)
   }
 
   renderCalibration() {
@@ -279,10 +449,10 @@ export class GameFlow {
           <p class="screen-kicker">CALIBRATION · 3 / 3</p>
           <h2 id="calibration-title">CALIBRATION <span>COMPLETE</span></h2>
           <div class="success-seal">TRACKING STABLE</div>
-          <p class="screen-copy">Relax your pointing hand, then point again to continue. Use the tracking panel whenever you need form guidance.</p>
+          <p class="screen-copy"><strong>ECHO:</strong> ${ECHO_DIALOGUE.calibrated}</p>
+          <p class="screen-copy">Tutorial starts automatically. Use the tracking panel whenever you need form guidance.</p>
           <div class="screen-actions"></div>
         </section>`
-      this.appendAction('CONTINUE', 'CALIBRATION_CONTINUE')
       return
     }
 
@@ -302,24 +472,24 @@ export class GameFlow {
   }
 
   renderTutorial() {
-    const complete = this.tutorialComplete.size === TUTORIAL_ACTIONS.length
+    const action = this.tutorialConfirmed ?? TUTORIAL_ACTIONS.find((item) => !this.tutorialComplete.has(item.id))
+    const superStep = action?.id === 'SUPER'
     this.stage.innerHTML = `
       <section class="story-screen tutorial-screen" aria-labelledby="tutorial-title">
         <p class="screen-kicker">OPERATOR TRAINING · ${this.tutorialComplete.size} / ${TUTORIAL_ACTIONS.length}</p>
         <h2 id="tutorial-title">COMBAT <span>CONTROLS</span></h2>
-        <p class="screen-copy">Use one hand to perform each action once. For a dodge, move your hand quickly sideways. In combat, release each pose before repeating it and allow abilities to recharge.</p>
-        <div class="tutorial-actions">
-          ${TUTORIAL_ACTIONS.map((action) => tutorialCard(action, this.tutorialComplete.has(action.id))).join('')}
-        </div>
+        <p class="screen-copy">${ECHO_DIALOGUE.training} Use one hand. Release each pose before repeating it. Move sideways quickly to dodge.</p>
+        <div class="gesture-prompt"><strong>${this.tutorialConfirmed ? `${action.title} CONFIRMED` : action ? `SHOW ${action.title}` : 'TRAINING COMPLETE'}</strong>
+          <span>${action?.ability ?? 'Choose your operative next.'}</span></div>
+        <p class="screen-copy">BASIC ATTACKS CHARGE SUPER · ✊ → +${COMBAT.SUPER_ENERGY_PER_BASIC_ATTACK} ENERGY · ✌️ → SUPER AT 100%</p>
+        ${superStep ? `<div class="super-meter is-ready"><div class="stat-label"><span>TRAINING DEMO · SUPER READY ✌️</span><strong>100%</strong></div>
+          <div class="health-track super-track"><span style="width:100%"></span></div></div>
+          <p class="screen-copy">Demo energy is full. Extend and separate index + middle; fold ring + pinky. Real combat starts at 0%.</p>` : ''}
         <div class="combo-demo" aria-label="Two-hand combination examples">
-          <span>2 FISTS · DUAL PULSE</span><span>2 PALMS · FULL BARRIER</span><span>FIST + PALM · OVERDRIVE</span>
+          <span>2 FISTS · DUAL PULSE</span><span>2 PALMS · FULL BARRIER</span><span>FIST + PALM · SUPER AT 100%</span>
         </div>
-        <p class="confirmation-status ${complete ? 'is-complete' : ''}">${complete
-          ? 'CORE ACTIONS CONFIRMED'
-          : 'SHOW THE REMAINING GESTURES TO CONTINUE'}</p>
-        <div class="screen-actions"></div>
+        <p class="confirmation-status" data-tutorial-status>${action ? 'PERFORM THE SHOWN ACTION' : 'TRAINING COMPLETE'}</p>
       </section>`
-    this.appendAction('CONTINUE', 'TUTORIAL_CONTINUE', !complete)
   }
 
   renderHeroSelect() {
@@ -334,7 +504,7 @@ export class GameFlow {
               <div data-hero-action="${hero.id}"></div>
             </article>`).join('')}
         </div>
-        <p class="screen-copy">All operators online. Choose your combat style.</p>
+        <p class="screen-copy"><strong>ECHO:</strong> ${ECHO_DIALOGUE.selectHero}</p>
         <p class="navigation-hint">POINT + HOLD 0.8s TO SELECT · RELAX HAND BETWEEN SELECTIONS</p>
       </section>`
     for (const hero of Object.values(HEROES)) {
@@ -352,52 +522,38 @@ export class GameFlow {
         <h2 id="briefing-title">MISSION <span>BRIEFING</span></h2>
         <div class="success-seal" role="status">SELECTED: ${hero.id} · ${hero.role}</div>
         <div class="echo-message">
-          <p><strong>ECHO:</strong> ${hero.id} synchronization complete.</p>
-          <p><strong>TARGET:</strong> THE WARDEN</p>
-          <p>The Warden is blocking access to the core. Eliminate it.</p>
+          <p><strong>TARGET:</strong> THE WARDEN · <strong>CLASS:</strong> CORE SENTINEL · <strong>STATUS:</strong> HOSTILE</p>
+          ${ECHO_DIALOGUE.briefing.map((line) => `<p><strong>ECHO:</strong> ${line}</p>`).join('')}
         </div>
         <p class="screen-copy">${hero.description}. Your gesture controls remain active throughout the encounter.</p>
         <div class="screen-actions"></div>
       </section>`
-    this.appendAction('BEGIN MISSION', 'BEGIN_MISSION')
+    this.appendAction('ENGAGE', 'BEGIN_MISSION')
   }
 
   renderResult() {
     const victory = this.result?.outcome === 'VICTORY'
+    const final = this.state === APP_STATES.FINAL_RESULT
     const hero = getHero(this.result?.heroId ?? this.selectedHero)
-    if (this.result?.teaser) {
-      this.stage.innerHTML = `
-        <section class="story-screen result-screen teaser-screen" aria-labelledby="teaser-title">
-          <p class="screen-kicker">CORE SECURITY · UNLOCKED</p>
-          <h2 id="teaser-title">CONNECTION <span>ANOMALY</span></h2>
-          <div class="echo-message"><p><strong>ECHO:</strong> Thank you, Operator.</p><p>...</p><p>CONNECTION ANOMALY DETECTED</p></div>
-          <p class="screen-copy">TO BE CONTINUED</p>
-          <div class="screen-actions"></div>
-        </section>`
-      this.appendAction('MAIN MENU', 'MAIN_MENU')
-      return
-    }
-
     this.stage.innerHTML = `
       <section class="story-screen result-screen ${victory ? 'is-victory' : 'is-defeat'}" aria-labelledby="result-title">
-        <p class="screen-kicker">MISSION RESULT</p>
+        <p class="screen-kicker">${victory ? 'NETWORK CONTROL RESTORED' : final ? 'ECHO CONTROL: 100%' : 'WARDEN · SECURITY LAYER ACTIVE'}</p>
         <h2 id="result-title">${victory ? 'MISSION <span>COMPLETE</span>' : 'CONNECTION <span>LOST</span>'}</h2>
         <div class="result-summary">
-          <strong>${victory ? 'THE WARDEN DEFEATED' : 'MISSION FAILED'}</strong>
+          <strong>${victory ? 'WARDEN: DEFEATED · ECHO: DEFEATED' : 'MISSION FAILED'}</strong>
           <p class="result-operative">OPERATIVE <span>${hero.id}</span></p>
-          <p>SCORE <span>${Number(this.result?.score ?? 0).toLocaleString()}</span></p>
+          <p>${victory ? 'FINAL SCORE' : 'SCORE'} <span>${Number(this.result?.score ?? 0).toLocaleString()}</span></p>
           ${this.result?.stats ? `<dl class="result-stats">
             ${Object.entries({ attacks: 'ATTACKS LANDED', blocks: 'BLOCKS', dodges: 'DODGES', combos: 'COMBOS USED' })
               .map(([key, label]) => `<div><dt>${label}</dt><dd>${this.result.stats[key]}</dd></div>`).join('')}
           </dl>` : ''}
         </div>
-        <p class="screen-copy">${victory
-          ? 'The core is accessible. ECHO is awaiting your next decision.'
-          : `${hero.id} lost synchronization. Re-enter the encounter when ready.`}</p>
+        <p class="screen-copy">${victory ? 'The channel is yours again. Network recovery can begin.'
+          : final ? 'Warden checkpoint secured. Retry ECHO with full health and the same operative.'
+            : `${hero.id} lost synchronization. Re-enter the encounter when ready.`}</p>
         <div class="screen-actions"></div>
       </section>`
-    if (victory) this.appendAction('CONTINUE', 'RESULT_CONTINUE')
-    this.appendAction('RETRY', 'RETRY')
+    if (!victory) this.appendAction(final ? 'RETRY FINAL BATTLE' : 'RETRY', final ? 'RETRY_FINAL' : 'RETRY')
     this.appendAction('MAIN MENU', 'MAIN_MENU')
   }
 
@@ -424,28 +580,31 @@ function badgeFor(state) {
     [APP_STATES.TUTORIAL]: 'TRAINING',
     [APP_STATES.HERO_SELECT]: 'OPERATOR SELECT',
     [APP_STATES.BRIEFING]: 'MISSION BRIEF',
-    [APP_STATES.COMBAT]: 'COMBAT LIVE',
+    [APP_STATES.WARDEN_COMBAT]: 'WARDEN LIVE',
+    [APP_STATES.STORY_REVEAL]: 'CORE UNLOCKED',
+    [APP_STATES.ECHO_BRIEFING]: 'PROTOCOL OVERRIDE',
+    [APP_STATES.ECHO_COMBAT]: 'ECHO LIVE',
+    [APP_STATES.RESTORATION]: 'RESTORING',
+    [APP_STATES.FINAL_RESULT]: 'FINAL RESULT',
+    [APP_STATES.ENDING]: 'SESSION COMPLETE',
     [APP_STATES.RESULT]: 'MISSION RESULT',
   }[state]
 }
 
-function tutorialCard(action, complete) {
-  return `<article class="tutorial-card ${complete ? 'is-complete' : ''}">
-    <span>${complete ? 'CONFIRMED' : 'PENDING'}</span><strong>${action.title}</strong><p>${action.ability}</p>
-  </article>`
-}
-
-function combatMarkup(hero) {
+function combatMarkup(hero, boss) {
   return `
-    <section class="combat-panel" aria-label="Combat arena">
-      <div class="combat-topline"><span>ENCOUNTER 01</span><span>${hero.id} VS THE WARDEN</span></div>
-      <div class="boss-status"><div class="stat-label"><span>THE WARDEN</span><strong data-boss-hp>300 / 300</strong></div><div class="health-track boss-track"><span data-boss-bar></span></div></div>
+    <section class="combat-panel encounter-${boss.cssClass}" aria-label="Combat arena">
+      <div class="combat-topline"><span>ENCOUNTER ${boss.encounter}</span><span>${hero.id} VS ${boss.name}</span></div>
+      <div class="boss-status"><div class="stat-label"><span>${boss.name}</span><strong data-boss-hp>${boss.hp} / ${boss.hp}</strong></div><div class="health-track boss-track"><span data-boss-bar></span></div></div>
       <div class="arena">
         <div class="arena-grid" aria-hidden="true"></div>
         <div class="warning-panel" data-warning hidden><span class="warning-eyebrow">WARNING</span><strong data-warning-title>ENERGY BLAST</strong><span data-warning-instruction>OPEN PALM TO BLOCK</span><span class="warning-countdown" data-warning-countdown>1.8s</span></div>
-        <div class="fighters" aria-hidden="true"><div class="fighter fighter-player fighter-${hero.id.toLowerCase()}"><div class="fighter-core"></div><span>${hero.id}</span></div><div class="fighter fighter-warden"><div class="fighter-core"></div><span>THE WARDEN</span></div></div>
+        <div class="fighters" aria-hidden="true"><div class="fighter fighter-player fighter-${hero.id.toLowerCase()}"><div class="fighter-core"></div><span>${hero.id}</span></div><div class="fighter fighter-boss fighter-${boss.cssClass}"><div class="fighter-core"></div><span>${boss.name}</span></div></div>
       </div>
-      <p class="combat-feedback" data-combat-feedback aria-live="polite">${abilityLegend(hero).slice(0, 3).map(([gesture, name]) => `${gesture}: ${name}`).join(' · ')}</p>
+      <div class="combat-controls">${abilityLegend(hero).slice(0, 4).map(([gesture, name]) => `<p><span>${gesture}</span><strong>${name}</strong></p>`).join('')}</div>
+      <div class="super-meter" data-super-meter><div class="stat-label"><span data-super-label>SUPER · ${hero.ultimate.name}</span><strong data-super-value>0%</strong></div>
+        <div class="health-track super-track" role="progressbar" aria-label="Super Energy" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-super-progress><span data-super-bar style="width:0%"></span></div></div>
+      <p class="combat-feedback" data-combat-feedback aria-live="polite">BASIC ATTACKS CHARGE SUPER · RELEASE EACH POSE TO REPEAT</p>
       <p class="combat-status" data-combat-status role="status"></p>
       <div class="combat-bottomline"><div class="player-status"><div class="stat-label"><span>${hero.id} · HP</span><strong data-player-hp>100 / 100</strong></div><div class="health-track player-track"><span data-player-bar></span></div></div><div class="score-status"><span>SCORE</span><strong data-score>0</strong></div></div>
     </section>`
