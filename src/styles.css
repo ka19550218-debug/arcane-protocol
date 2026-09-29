@@ -49,7 +49,7 @@ h1 span { color: #5ce9f2; }
 .warning-panel.is-defended { border-color: #65edce; box-shadow: 0 0 24px #65edce55; }
 .warning-panel.is-defended [data-warning-instruction] { color: #65edce; }
 .combat-feedback { min-height: 48px; margin: 0; padding: 14px; border: 1px solid #263f58; border-top: 0; background: #101e30; color: #a8bdcc; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-align: center; }
-.combat-feedback[data-kind="hit"], .combat-feedback[data-kind="shield"], .combat-feedback[data-kind="dodge"], .combat-feedback[data-kind="victory"] { color: #78f6de; }
+.combat-feedback[data-kind="hit"], .combat-feedback[data-kind="dual-pulse"], .combat-feedback[data-kind="overdrive"], .combat-feedback[data-kind="shield"], .combat-feedback[data-kind="dodge"], .combat-feedback[data-kind="victory"] { color: #78f6de; }
 .combat-feedback[data-kind="danger"], .combat-feedback[data-kind="damage"], .combat-feedback[data-kind="defeat"] { color: #ff8e9e; }
 .combat-bottomline { gap: 25px; margin-top: 22px; }
 .player-status { flex: 1; }
@@ -57,7 +57,13 @@ h1 span { color: #5ce9f2; }
 .score-status strong { font-size: 27px; color: #ffcf76; }
 .shield-active .fighter-vex { filter: drop-shadow(0 0 22px #66f9e9); }
 .shield-active .fighter-vex::before, .shield-active .fighter-vex::after { box-shadow: 0 0 20px #66f9e9; }
+.full-barrier-active .fighter-vex { filter: drop-shadow(0 0 32px #66f9e9); }
+.full-barrier-active .shield-status { border-color: #9fffe8; box-shadow: 0 0 12px #66f9e955; }
 .boss-hit .fighter-warden { filter: drop-shadow(0 0 28px #fff); }
+.dual-pulse-effect .arena::before, .overdrive-effect .arena::before { position: absolute; z-index: 1; inset: 0; pointer-events: none; content: ''; animation: combo-flash 550ms ease-out both; }
+.dual-pulse-effect .arena::before { background: radial-gradient(circle at 65% 48%, #65f6ff77, transparent 45%); }
+.overdrive-effect .arena::before { background: radial-gradient(circle at 65% 48%, #ffcf76bb, #65f6ff55 35%, transparent 70%); }
+@keyframes combo-flash { from { opacity: 1; transform: scale(.85); } to { opacity: 0; transform: scale(1.2); } }
 .player-hit .arena { box-shadow: inset 0 0 75px #f4436288; }
 .tracking-panel { padding: 16px; }
 .tracking-heading { margin-bottom: 12px; }

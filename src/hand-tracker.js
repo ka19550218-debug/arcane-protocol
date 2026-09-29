@@ -31,7 +31,7 @@ export async function startHandTracking(videoElement, canvasElement, onLandmarks
         lastVideoTime = videoElement.currentTime
         const result = handLandmarker.detectForVideo(videoElement, performance.now())
         drawHands(context, canvasElement, result.landmarks)
-        onLandmarks?.(result.landmarks, performance.now())
+        onLandmarks?.(result.landmarks, result.handedness, performance.now())
       }
     }
 

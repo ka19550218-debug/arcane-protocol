@@ -1,7 +1,7 @@
 import './styles.css'
 import { startCamera, stopCamera } from './camera.js'
-import { GestureEngine } from './gesture-engine.js'
-import { GestureQualityEvaluator } from './gesture-quality.js'
+import { GESTURES } from './gesture-engine.js'
+import { TwoHandInput } from './two-hand-input.js'
 import { startHandTracking } from './hand-tracker.js'
 import { GestureNavigation } from './gesture-navigation.js'
 import { CombatGame } from './game/combat.js'
@@ -49,8 +49,8 @@ app.innerHTML = `
           </section>
           <p class="camera-status" role="status">Starting camera…</p>
         </div>
-        <p class="gesture-display" aria-live="polite">GESTURE: NONE</p>
-        <p class="gesture-debug">HAND: NO · LANDMARKS: 0 · RAW: NONE</p>
+        <p class="gesture-display" aria-live="polite">LEFT: NONE · RIGHT: NONE</p>
+        <p class="gesture-debug">LEFT RAW: NONE · RIGHT RAW: NONE</p>
         <p class="shield-status" data-shield>SHIELD OFFLINE</p>
         <section class="gesture-quality is-neutral" aria-live="polite" aria-label="Gesture quality feedback">
           <p class="gesture-quality-title">AWAITING HAND</p>
@@ -58,7 +58,7 @@ app.innerHTML = `
           <p class="gesture-quality-message">Show a gesture to receive guidance</p>
           <p class="gesture-quality-debug" aria-hidden="true"></p>
         </section>
-        <div class="controls-guide"><p><strong>FIST</strong><span>PULSE SHOT</span></p><p><strong>OPEN PALM</strong><span>ENERGY SHIELD</span></p><p><strong>SWIPE ← →</strong><span>DODGE</span></p></div>
+        <div class="controls-guide"><p><strong>FIST</strong><span>PULSE SHOT</span></p><p><strong>OPEN PALM</strong><span>ENERGY SHIELD</span></p><p><strong>SWIPE ← →</strong><span>DODGE</span></p><p><strong>2 FISTS</strong><span>DUAL PULSE</span></p><p><strong>2 PALMS</strong><span>FULL BARRIER</span></p><p><strong>FIST + PALM</strong><span>OVERDRIVE</span></p></div>
       </aside>
     </div>
   </section>
@@ -69,8 +69,7 @@ const overlayElement = document.querySelector('.hand-overlay')
 const statusElement = document.querySelector('.camera-status')
 const gestureDisplayElement = document.querySelector('.gesture-display')
 const gestureDebugElement = document.querySelector('.gesture-debug')
-const gestureEngine = new GestureEngine()
-const gestureQualityEvaluator = new GestureQualityEvaluator()
+const twoHandInput = new TwoHandInput()
 const gestureQualityElement = document.querySelector('.gesture-quality')
 const gestureQualityTitleElement = document.querySelector('.gesture-quality-title')
 const gestureQualityMeterElement = document.querySelector('.gesture-quality-meter > span')
@@ -96,6 +95,7 @@ const gestureNavigation = new GestureNavigation({
 
 let cameraStream
 let stopHandTracking
+let cursorHandSide = 'LEFT'
 
 initializeCamera()
 requestAnimationFrame(updateCombat)
@@ -124,27 +124,35 @@ async function initializeCamera() {
   }
 }
 
-function updateGestureDisplay(landmarks, timestamp) {
-  const gesture = gestureEngine.update(landmarks, timestamp)
-  const debugInfo = gestureEngine.getDebugInfo()
-  gestureDisplayElement.textContent = `GESTURE: ${gesture}`
-  gestureDebugElement.textContent = [
-    `HAND: ${debugInfo.handDetected ? 'YES' : 'NO'}`,
-    `LANDMARKS: ${debugInfo.landmarkCount}`,
-    `RAW: ${debugInfo.rawGesture}`,
-  ].join(' · ')
-  updateGestureQuality(landmarks, timestamp, debugInfo.rawGesture, gesture)
-  combatGame.acceptGesture(gesture, timestamp)
+function updateGestureDisplay(landmarks, handedness, timestamp) {
+  const hands = twoHandInput.update(landmarks, handedness, timestamp)
+  gestureDisplayElement.textContent = `LEFT: ${hands.LEFT.gesture} · RIGHT: ${hands.RIGHT.gesture}`
+  gestureDebugElement.textContent = `LEFT RAW: ${hands.LEFT.debug.rawGesture} · RIGHT RAW: ${hands.RIGHT.debug.rawGesture}`
+  const feedbackHand = ['LEFT', 'RIGHT'].filter((side) => hands[side].landmarks)
+    .sort((a, b) => feedbackPriority(hands[b].feedback) - feedbackPriority(hands[a].feedback))[0]
+  updateGestureQuality(
+    feedbackHand ? hands[feedbackHand].feedback : { state: 'neutral', components: [] },
+    feedbackHand,
+    feedbackHand ? hands[feedbackHand].debug.rawGesture : GESTURES.NONE,
+  )
+  combatGame.acceptHands({ LEFT: hands.LEFT.gesture, RIGHT: hands.RIGHT.gesture }, timestamp)
+  if (hands[cursorHandSide].gesture !== GESTURES.POINT) {
+    cursorHandSide = hands.LEFT.gesture === GESTURES.POINT ? 'LEFT' : 'RIGHT'
+  }
+  const cursorHand = hands[cursorHandSide]
   gestureNavigation.update({
-    gesture,
-    indexTip: landmarks?.[0]?.[8],
+    gesture: cursorHand.gesture,
+    indexTip: cursorHand.landmarks?.[8],
     timestamp,
     videoElement,
   })
 }
 
-function updateGestureQuality(landmarks, timestamp, rawGesture, stableGesture) {
-  const feedback = gestureQualityEvaluator.update(landmarks, timestamp, rawGesture, stableGesture)
+function feedbackPriority(feedback) {
+  return { correcting: 3, pending: 2, success: 1, neutral: 0 }[feedback.state]
+}
+
+function updateGestureQuality(feedback, side, rawGesture) {
   if (SHOW_GESTURE_DEBUG) {
     const fingerDebug = feedback.fingerStates
       ? Object.entries(feedback.fingerStates).map(([name, state]) => `${name}: ${state}`).join(' · ')
@@ -161,7 +169,7 @@ function updateGestureQuality(landmarks, timestamp, rawGesture, stableGesture) {
   }
   if (feedback.state === 'neutral') {
     gestureQualityElement.className = 'gesture-quality is-neutral'
-    gestureQualityTitleElement.textContent = feedback.fingerStates ? 'NO STATIC GESTURE' : 'AWAITING HAND'
+    gestureQualityTitleElement.textContent = feedback.fingerStates ? `${side} · NO STATIC GESTURE` : 'AWAITING HAND'
     gestureQualityMeterElement.style.width = '0%'
     gestureQualityMessageElement.textContent = feedback.fingerStates
       ? 'Show a static gesture to receive guidance'
@@ -171,7 +179,7 @@ function updateGestureQuality(landmarks, timestamp, rawGesture, stableGesture) {
 
   gestureQualityElement.className = `gesture-quality is-${feedback.state}`
   const label = feedback.state === 'success' ? formatGesture(feedback.gesture) : `ATTEMPTING ${formatGesture(feedback.gesture)}`
-  gestureQualityTitleElement.textContent = `${label} · QUALITY: ${feedback.quality}%`
+  gestureQualityTitleElement.textContent = `${side} · ${label} · QUALITY: ${feedback.quality}%`
   gestureQualityMeterElement.style.width = `${feedback.quality}%`
   gestureQualityMessageElement.textContent = feedback.state === 'success'
     ? 'Gesture recognized'

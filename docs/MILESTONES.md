@@ -118,6 +118,9 @@ Definition of done:
 One full battle can be completed.
 
 ---
+## M6.1 - Two-Hand Combat
+
+Status: DONE
 
 ## M7 - Complete MVP
 

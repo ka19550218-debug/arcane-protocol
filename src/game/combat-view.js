@@ -46,11 +46,16 @@ export class CombatView {
     setText(this.feedback, feedbackVisible ? game.feedback.message : 'FIST: PULSE SHOT  ·  OPEN PALM: SHIELD  ·  SWIPE: DODGE')
     this.feedback.dataset.kind = feedbackVisible ? game.feedback.kind : 'neutral'
     this.root.classList.toggle('shield-active', game.state === GAME_STATES.COMBAT && now < game.shieldUntil)
-    this.root.classList.toggle('boss-hit', game.feedback.kind === 'hit' && now < game.feedback.until)
+    this.root.classList.toggle('full-barrier-active', game.state === GAME_STATES.COMBAT && now < game.fullBarrierUntil)
+    this.root.classList.toggle('boss-hit', ['hit', 'dual-pulse', 'overdrive'].includes(game.feedback.kind) && now < game.feedback.until)
+    this.root.classList.toggle('dual-pulse-effect', game.feedback.kind === 'dual-pulse' && now < game.feedback.until)
+    this.root.classList.toggle('overdrive-effect', game.feedback.kind === 'overdrive' && now < game.feedback.until)
     this.root.classList.toggle('player-hit', game.feedback.kind === 'damage' && now < game.feedback.until)
-    setText(this.shield, now < game.shieldUntil && game.state === GAME_STATES.COMBAT
-      ? `SHIELD ${(Math.max(0, game.shieldUntil - now) / 1000).toFixed(1)}s`
-      : 'SHIELD OFFLINE')
+    setText(this.shield, game.state === GAME_STATES.COMBAT && now < game.fullBarrierUntil
+      ? `FULL BARRIER ${(Math.max(0, game.fullBarrierUntil - now) / 1000).toFixed(1)}s`
+      : game.state === GAME_STATES.COMBAT && now < game.shieldUntil
+        ? `SHIELD ${(Math.max(0, game.shieldUntil - now) / 1000).toFixed(1)}s`
+        : 'SHIELD OFFLINE')
 
     if (game.state !== this.lastState) {
       this.lastState = game.state

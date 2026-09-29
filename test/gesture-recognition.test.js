@@ -4,6 +4,7 @@ import { getFingerStates } from '../src/finger-state.js'
 import { GestureEngine, GESTURES } from '../src/gesture-engine.js'
 import { GestureQualityEvaluator } from '../src/gesture-quality.js'
 import { GestureNavigation } from '../src/gesture-navigation.js'
+import { TwoHandInput, assignHands } from '../src/two-hand-input.js'
 
 const SHAPES = {
   extended: [[0, -0.10], [0, -0.20], [0, -0.30]],
@@ -203,4 +204,37 @@ test('a new static gesture needs three consistent frames', () => {
   assert.equal(engine.update([fist], 198), GESTURES.NONE)
   assert.equal(engine.update([fist], 231), GESTURES.NONE)
   assert.equal(engine.update([fist], 264), GESTURES.FIST)
+})
+
+test('handedness is swapped for the mirrored preview and both classifiers keep state when result order changes', () => {
+  const input = new TwoHandInput()
+  const fist = makeHand(['curled', 'curled', 'curled', 'curled'])
+  const palm = makeHand(['extended', 'extended', 'extended', 'extended'])
+  let hands
+  for (let frame = 0; frame < 3; frame += 1) {
+    const reversed = frame % 2 === 1
+    hands = input.update(
+      reversed ? [palm, fist] : [fist, palm],
+      reversed ? [[{ categoryName: 'Left' }], [{ categoryName: 'Right' }]]
+        : [[{ categoryName: 'Right' }], [{ categoryName: 'Left' }]],
+      frame * 33,
+    )
+  }
+  assert.equal(hands.LEFT.gesture, GESTURES.FIST)
+  assert.equal(hands.RIGHT.gesture, GESTURES.OPEN_PALM)
+  assert.equal(hands.LEFT.feedback.state, 'success')
+  assert.equal(hands.RIGHT.feedback.state, 'success')
+
+  hands = input.update([palm], [[{ categoryName: 'Left' }]], 100)
+  assert.equal(hands.LEFT.gesture, GESTURES.NONE)
+  assert.equal(hands.RIGHT.gesture, GESTURES.OPEN_PALM)
+})
+
+test('missing handedness uses mirrored positions and a known label when available', () => {
+  const left = makeHand(['extended', 'curled', 'curled', 'curled']).map((point) => ({ ...point, x: point.x + 0.2 }))
+  const right = makeHand(['curled', 'curled', 'curled', 'curled']).map((point) => ({ ...point, x: point.x - 0.2 }))
+  assert.equal(assignHands([right, left]).LEFT, left)
+  assert.equal(assignHands([right, left]).RIGHT, right)
+  assert.equal(assignHands([right, left], [[{ categoryName: 'Left' }], []]).RIGHT, right)
+  assert.equal(assignHands([left]).LEFT, left)
 })
