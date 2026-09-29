@@ -1,6 +1,7 @@
 import './styles.css'
 import { startCamera, stopCamera } from './camera.js'
 import { GestureEngine } from './gesture-engine.js'
+import { GestureQualityEvaluator } from './gesture-quality.js'
 import { startHandTracking } from './hand-tracker.js'
 import { createGestureButton, GestureNavigation } from './gesture-navigation.js'
 
@@ -14,6 +15,12 @@ app.innerHTML = `
       <canvas class="hand-overlay" aria-hidden="true"></canvas>
       <p class="gesture-display" aria-live="polite">GESTURE: NONE</p>
       <p class="gesture-debug">HAND: NO · LANDMARKS: 0 · RAW: NONE</p>
+      <section class="gesture-quality is-neutral" aria-live="polite" aria-label="Gesture quality feedback">
+        <p class="gesture-quality-title">AWAITING HAND</p>
+        <div class="gesture-quality-meter" aria-hidden="true"><span></span></div>
+        <p class="gesture-quality-message">Show a gesture to receive guidance</p>
+        <p class="gesture-quality-debug" aria-hidden="true"></p>
+      </section>
       <section class="navigation-menu" aria-label="Temporary game menu">
         <p class="navigation-label">POINT TO SELECT</p>
         <div class="navigation-buttons"></div>
@@ -30,6 +37,14 @@ const statusElement = document.querySelector('.camera-status')
 const gestureDisplayElement = document.querySelector('.gesture-display')
 const gestureDebugElement = document.querySelector('.gesture-debug')
 const gestureEngine = new GestureEngine()
+const gestureQualityEvaluator = new GestureQualityEvaluator()
+const gestureQualityElement = document.querySelector('.gesture-quality')
+const gestureQualityTitleElement = document.querySelector('.gesture-quality-title')
+const gestureQualityMeterElement = document.querySelector('.gesture-quality-meter > span')
+const gestureQualityMessageElement = document.querySelector('.gesture-quality-message')
+const gestureQualityDebugElement = document.querySelector('.gesture-quality-debug')
+const SHOW_GESTURE_DEBUG = true // Set false after tuning; no other UI changes needed.
+gestureQualityDebugElement.hidden = !SHOW_GESTURE_DEBUG
 const navigationMenuElement = document.querySelector('.navigation-menu')
 const navigationButtonsElement = document.querySelector('.navigation-buttons')
 const navigationFeedbackElement = document.querySelector('.navigation-feedback')
@@ -81,12 +96,52 @@ function updateGestureDisplay(landmarks, timestamp) {
     `LANDMARKS: ${debugInfo.landmarkCount}`,
     `RAW: ${debugInfo.rawGesture}`,
   ].join(' · ')
+  updateGestureQuality(landmarks, timestamp, debugInfo.rawGesture, gesture)
   gestureNavigation.update({
     gesture,
     indexTip: landmarks?.[0]?.[8],
     timestamp,
     videoElement,
   })
+}
+
+function updateGestureQuality(landmarks, timestamp, rawGesture, stableGesture) {
+  const feedback = gestureQualityEvaluator.update(landmarks, timestamp, rawGesture, stableGesture)
+  if (SHOW_GESTURE_DEBUG) {
+    const fingerDebug = feedback.fingerStates
+      ? Object.entries(feedback.fingerStates).map(([name, state]) => `${name}: ${state}`).join(' · ')
+      : ''
+    const componentDebug = feedback.components
+      .map(({ name, score }) => `${name}: ${Math.round(score * 100)}%`).join(' · ')
+    const classificationDebug = [
+      `ATTEMPT: ${feedback.attemptedGesture ?? 'NONE'}`,
+      `BASE: ${rawGesture}`,
+      `QUALITY: ${feedback.quality ?? 0}%`,
+    ].join(' · ')
+    gestureQualityDebugElement.textContent = [fingerDebug, classificationDebug, componentDebug]
+      .filter(Boolean).join(' | ')
+  }
+  if (feedback.state === 'neutral') {
+    gestureQualityElement.className = 'gesture-quality is-neutral'
+    gestureQualityTitleElement.textContent = feedback.fingerStates ? 'NO STATIC GESTURE' : 'AWAITING HAND'
+    gestureQualityMeterElement.style.width = '0%'
+    gestureQualityMessageElement.textContent = feedback.fingerStates
+      ? 'Show a static gesture to receive guidance'
+      : 'Show a hand to receive guidance'
+    return
+  }
+
+  gestureQualityElement.className = `gesture-quality is-${feedback.state}`
+  const label = feedback.state === 'success' ? formatGesture(feedback.gesture) : `ATTEMPTING ${formatGesture(feedback.gesture)}`
+  gestureQualityTitleElement.textContent = `${label} · QUALITY: ${feedback.quality}%`
+  gestureQualityMeterElement.style.width = `${feedback.quality}%`
+  gestureQualityMessageElement.textContent = feedback.state === 'success'
+    ? 'Gesture recognized'
+    : feedback.state === 'pending' ? 'Confirming gesture…' : feedback.correction
+}
+
+function formatGesture(gesture) {
+  return gesture.replace('_', ' ')
 }
 
 window.addEventListener('beforeunload', () => {

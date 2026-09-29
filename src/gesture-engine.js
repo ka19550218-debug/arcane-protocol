@@ -1,3 +1,5 @@
+import { FINGER_STATE_THRESHOLDS, getFingerStates, getFistTipExtension } from './finger-state.js'
+
 export const GESTURES = Object.freeze({
   NONE: 'NONE',
   POINT: 'POINT',
@@ -7,13 +9,8 @@ export const GESTURES = Object.freeze({
   SWIPE_RIGHT: 'SWIPE_RIGHT',
 })
 
-// All distances are normalized MediaPipe landmark coordinates.
+// Swipe distances are normalized MediaPipe landmark coordinates.
 export const GESTURE_THRESHOLDS = Object.freeze({
-  EXTENDED_PIP_ANGLE: 155,
-  EXTENDED_DIP_ANGLE: 150,
-  EXTENDED_TIP_REACH: 1.1,
-  FOLDED_JOINT_ANGLE: 135,
-  FOLDED_TIP_REACH: 1.05,
   STATIC_GESTURE_FRAMES: 3,
   SWIPE_HISTORY_MS: 400,
   SWIPE_MIN_DISTANCE: 0.18,
@@ -21,10 +18,6 @@ export const GESTURE_THRESHOLDS = Object.freeze({
   SWIPE_COOLDOWN_MS: 700,
 })
 
-const FINGER_TIPS = [8, 12, 16, 20]
-const FINGER_BASES = [5, 9, 13, 17]
-const FINGER_PIPS = [6, 10, 14, 18]
-const FINGER_DIPS = [7, 11, 15, 19]
 const EXPECTED_LANDMARK_COUNT = 21
 
 export class GestureEngine {
@@ -82,19 +75,14 @@ export class GestureEngine {
   }
 
   detectStaticGesture(landmarks) {
-    const fingerStates = FINGER_TIPS.map((tipIndex, fingerIndex) => getFingerState(
-      landmarks,
-      FINGER_BASES[fingerIndex],
-      FINGER_PIPS[fingerIndex],
-      FINGER_DIPS[fingerIndex],
-      tipIndex,
-    ))
-    const extended = fingerStates.map((finger) => finger.extended)
-    const folded = fingerStates.map((finger) => finger.folded)
+    const { INDEX, MIDDLE, RING, PINKY } = getFingerStates(landmarks)
 
-    if (extended.every(Boolean)) return GESTURES.OPEN_PALM
-    if (extended[0] && folded.slice(1).every(Boolean)) return GESTURES.POINT
-    if (folded.every(Boolean)) return GESTURES.FIST
+    if ([INDEX, MIDDLE, RING, PINKY].every((state) => state === 'EXTENDED')) return GESTURES.OPEN_PALM
+    if (INDEX === 'EXTENDED' && [MIDDLE, RING, PINKY].every((state) => state !== 'EXTENDED')) return GESTURES.POINT
+    if (
+      [INDEX, MIDDLE, RING, PINKY].every((state) => state === 'CURLED') &&
+      getFistTipExtension(landmarks) <= FINGER_STATE_THRESHOLDS.FIST_MAX_TIP_EXTENSION_PALM_RATIO
+    ) return GESTURES.FIST
 
     return GESTURES.NONE
   }
@@ -142,41 +130,4 @@ export class GestureEngine {
       this.stableGesture = candidate
     }
   }
-}
-
-function distance(first, second) {
-  return Math.hypot(first.x - second.x, first.y - second.y)
-}
-
-function getFingerState(landmarks, baseIndex, pipIndex, dipIndex, tipIndex) {
-  const wrist = landmarks[0]
-  const base = landmarks[baseIndex]
-  const pip = landmarks[pipIndex]
-  const dip = landmarks[dipIndex]
-  const tip = landmarks[tipIndex]
-  const pipAngle = angleDegrees(base, pip, dip)
-  const dipAngle = angleDegrees(pip, dip, tip)
-  const pipReach = distance(wrist, pip)
-  const tipReach = pipReach === 0 ? 0 : distance(wrist, tip) / pipReach
-
-  return {
-    extended:
-      pipAngle >= GESTURE_THRESHOLDS.EXTENDED_PIP_ANGLE &&
-      dipAngle >= GESTURE_THRESHOLDS.EXTENDED_DIP_ANGLE &&
-      tipReach >= GESTURE_THRESHOLDS.EXTENDED_TIP_REACH,
-    folded:
-      pipAngle <= GESTURE_THRESHOLDS.FOLDED_JOINT_ANGLE ||
-      dipAngle <= GESTURE_THRESHOLDS.FOLDED_JOINT_ANGLE ||
-      tipReach <= GESTURE_THRESHOLDS.FOLDED_TIP_REACH,
-  }
-}
-
-function angleDegrees(first, vertex, last) {
-  const firstVector = { x: first.x - vertex.x, y: first.y - vertex.y }
-  const lastVector = { x: last.x - vertex.x, y: last.y - vertex.y }
-  const magnitude = Math.hypot(firstVector.x, firstVector.y) * Math.hypot(lastVector.x, lastVector.y)
-  if (magnitude === 0) return 0
-
-  const cosine = (firstVector.x * lastVector.x + firstVector.y * lastVector.y) / magnitude
-  return Math.acos(Math.min(1, Math.max(-1, cosine))) * (180 / Math.PI)
 }

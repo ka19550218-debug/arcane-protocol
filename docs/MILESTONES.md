@@ -84,7 +84,7 @@ User can navigate a test menu using only their hand.
 
 ## M5 - Error Mode
 
-Status: TODO
+Status: DONE
 
 - Gesture quality score
 - Specific error feedback
