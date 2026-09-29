@@ -33,7 +33,7 @@ User can open the site and see their webcam.
 
 ## M2 - Hand Tracking
 
-Status: TODO
+Status: DONE
 
 - Integrate MediaPipe
 - Detect hand landmarks
