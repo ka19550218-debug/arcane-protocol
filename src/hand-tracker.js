@@ -12,7 +12,7 @@ const HAND_CONNECTIONS = [
   [13, 17], [0, 17], [17, 18], [18, 19], [19, 20],
 ]
 
-export async function startHandTracking(videoElement, canvasElement) {
+export async function startHandTracking(videoElement, canvasElement, onLandmarks) {
   const vision = await FilesetResolver.forVisionTasks(WASM_ROOT)
   const handLandmarker = await HandLandmarker.createFromOptions(vision, {
     baseOptions: { modelAssetPath: MODEL_PATH },
@@ -31,6 +31,7 @@ export async function startHandTracking(videoElement, canvasElement) {
         lastVideoTime = videoElement.currentTime
         const result = handLandmarker.detectForVideo(videoElement, performance.now())
         drawHands(context, canvasElement, result.landmarks)
+        onLandmarks?.(result.landmarks, performance.now())
       }
     }
 

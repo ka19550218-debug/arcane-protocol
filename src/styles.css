@@ -69,6 +69,27 @@ h1 {
   font-size: 0.95rem;
 }
 
+.gesture-display {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  margin: 0;
+  color: #65f6ff;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 12px #1bc4d9;
+}
+
+.gesture-debug {
+  position: absolute;
+  top: 44px;
+  left: 16px;
+  margin: 0;
+  color: #aab4cc;
+  font-size: 0.75rem;
+}
+
 .camera-status.is-ready {
   color: #9ff2bc;
 }
