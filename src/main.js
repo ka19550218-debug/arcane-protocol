@@ -171,8 +171,16 @@ function feedbackPriority(feedback) {
 
 function updateGestureQuality(feedback, side, rawGesture) {
   if (SHOW_GESTURE_DEBUG) {
-    const fingerDebug = feedback.fingerStates
-      ? Object.entries(feedback.fingerStates).map(([name, state]) => `${name}: ${state}`).join(' · ')
+    const fingerDebug = feedback.fingerDiagnostics
+      ? Object.entries(feedback.fingerDiagnostics).map(([name, diagnostics]) => {
+        if (name === 'THUMB') {
+          return `${name}: ${diagnostics.state} (MCP ${formatMetric(diagnostics.mcpAngle, 0)}° · IP ${formatMetric(diagnostics.ipAngle, 0)}° · TIP/BASE ${formatMetric(diagnostics.tipToBase)})`
+        }
+        return `${name}: ${diagnostics.state} (PIP ${formatMetric(diagnostics.pipAngle3d, 0)}° · DIP ${formatMetric(diagnostics.dipAngle3d, 0)}° · CURL ${formatMetric(diagnostics.totalFlexion, 0)}° · TIP/CHAIN ${formatMetric(diagnostics.tipToChain)})`
+      }).join(' | ')
+      : ''
+    const fistTipDebug = feedback.fistTipMetrics
+      ? `FIST TIPS: AVG ${formatMetric(feedback.fistTipMetrics.averageExtension)} · CLOSE ${feedback.fistTipMetrics.closeTipCount}/4`
       : ''
     const componentDebug = feedback.components
       .map(({ name, score }) => `${name}: ${Math.round(score * 100)}%`).join(' · ')
@@ -181,7 +189,7 @@ function updateGestureQuality(feedback, side, rawGesture) {
       `BASE: ${rawGesture}`,
       `QUALITY: ${feedback.quality ?? 0}%`,
     ].join(' · ')
-    gestureQualityDebugElement.textContent = [fingerDebug, classificationDebug, componentDebug]
+    gestureQualityDebugElement.textContent = [fingerDebug, fistTipDebug, classificationDebug, componentDebug]
       .filter(Boolean).join(' | ')
   }
 
@@ -202,6 +210,10 @@ function updateGestureQuality(feedback, side, rawGesture) {
   gestureQualityMessageElement.textContent = feedback.state === 'success'
     ? 'Gesture recognized'
     : feedback.state === 'pending' ? 'Confirming gesture…' : feedback.correction
+}
+
+function formatMetric(value, digits = 2) {
+  return Number.isFinite(value) ? value.toFixed(digits) : '—'
 }
 
 function formatGesture(gesture) {

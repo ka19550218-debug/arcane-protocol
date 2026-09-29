@@ -1,4 +1,9 @@
-import { FINGER_STATE_THRESHOLDS, getFingerStates, getFistTipExtension, getVSignSeparation } from './finger-state.js'
+import {
+  FINGER_STATE_THRESHOLDS,
+  getFingerDiagnostics,
+  getFistTipMetrics,
+  getVSignSeparation,
+} from './finger-state.js'
 import { GESTURES } from './gesture-engine.js'
 
 export const GESTURE_QUALITY_THRESHOLDS = Object.freeze({
@@ -30,10 +35,14 @@ export class GestureQualityEvaluator {
       return { state: 'neutral', fingerStates: null, components: [] }
     }
 
-    const fingerStates = getFingerStates(hand)
+    const fingerDiagnostics = getFingerDiagnostics(hand)
+    const fingerStates = Object.fromEntries(
+      Object.entries(fingerDiagnostics).map(([name, diagnostics]) => [name, diagnostics.state]),
+    )
+    const fistTipMetrics = getFistTipMetrics(hand)
     const stability = this.getStability(hand, timestamp)
     if (classifiedGesture === GESTURES.SWIPE_LEFT || classifiedGesture === GESTURES.SWIPE_RIGHT) {
-      return { state: 'neutral', fingerStates, components: [] }
+      return { state: 'neutral', fingerStates, fingerDiagnostics, fistTipMetrics, components: [] }
     }
 
     const evaluations = {
@@ -48,7 +57,7 @@ export class GestureQualityEvaluator {
     const evaluation = evaluations[attemptedGesture]
 
     if (classifiedGesture === GESTURES.NONE && evaluation.quality < GESTURE_QUALITY_THRESHOLDS.ATTEMPT_MIN_QUALITY) {
-      return { state: 'neutral', fingerStates, components: [] }
+      return { state: 'neutral', fingerStates, fingerDiagnostics, fistTipMetrics, components: [] }
     }
 
     const qualityPasses = evaluation.quality >= GESTURE_QUALITY_THRESHOLDS.SUCCESS_MIN_QUALITY
@@ -62,6 +71,8 @@ export class GestureQualityEvaluator {
       quality: evaluation.quality,
       correction: state === 'correcting' ? evaluation.correction : null,
       fingerStates,
+      fingerDiagnostics,
+      fistTipMetrics,
       components: evaluation.components,
     }
   }
@@ -129,7 +140,8 @@ function evaluateOpenPalm(hand, states, stability) {
 function evaluateFist(hand, states, stability) {
   const uncurled = MAIN_FINGERS.filter((name) => states[name] !== 'CURLED')
   const curl = average(MAIN_FINGERS.map((name) => stateScore(states[name], 'CURLED')))
-  const tipExtension = getFistTipExtension(hand)
+  const tipMetrics = getFistTipMetrics(hand)
+  const tipExtension = tipMetrics.averageExtension
   const tipPosition = scoreAtMost(
     tipExtension,
     FINGER_STATE_THRESHOLDS.FIST_IDEAL_TIP_EXTENSION_PALM_RATIO,
@@ -137,7 +149,10 @@ function evaluateFist(hand, states, stability) {
   )
   const required = uncurled.length
     ? 'CURL'
-    : tipExtension > FINGER_STATE_THRESHOLDS.FIST_MAX_TIP_EXTENSION_PALM_RATIO ? 'TIP_POSITION' : null
+    : tipExtension > FINGER_STATE_THRESHOLDS.FIST_MAX_AVERAGE_TIP_EXTENSION_PALM_RATIO ||
+      tipMetrics.closeTipCount < FINGER_STATE_THRESHOLDS.FIST_MIN_CLOSE_TIP_COUNT
+      ? 'TIP_POSITION'
+      : null
   return summarize([
     component('CURL', curl, 0.65, uncurled.length === MAIN_FINGERS.length
       ? 'Curl your fingers further'

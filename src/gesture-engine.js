@@ -1,4 +1,4 @@
-import { FINGER_STATE_THRESHOLDS, getFingerStates, getFistTipExtension, getVSignSeparation } from './finger-state.js'
+import { FINGER_STATE_THRESHOLDS, getFingerStates, getFistTipMetrics, getVSignSeparation } from './finger-state.js'
 
 export const GESTURES = Object.freeze({
   NONE: 'NONE',
@@ -77,6 +77,7 @@ export class GestureEngine {
 
   detectStaticGesture(landmarks) {
     const { INDEX, MIDDLE, RING, PINKY } = getFingerStates(landmarks)
+    const fistTips = getFistTipMetrics(landmarks)
 
     if ([INDEX, MIDDLE, RING, PINKY].every((state) => state === 'EXTENDED')) return GESTURES.OPEN_PALM
     if (INDEX === 'EXTENDED' && [MIDDLE, RING, PINKY].every((state) => state !== 'EXTENDED')) return GESTURES.POINT
@@ -87,7 +88,8 @@ export class GestureEngine {
     ) return GESTURES.V_SIGN
     if (
       [INDEX, MIDDLE, RING, PINKY].every((state) => state === 'CURLED') &&
-      getFistTipExtension(landmarks) <= FINGER_STATE_THRESHOLDS.FIST_MAX_TIP_EXTENSION_PALM_RATIO
+      fistTips.averageExtension <= FINGER_STATE_THRESHOLDS.FIST_MAX_AVERAGE_TIP_EXTENSION_PALM_RATIO &&
+      fistTips.closeTipCount >= FINGER_STATE_THRESHOLDS.FIST_MIN_CLOSE_TIP_COUNT
     ) return GESTURES.FIST
 
     return GESTURES.NONE

@@ -2,11 +2,12 @@
 export const FINGER_STATE_THRESHOLDS = Object.freeze({
   EXTENDED_PIP_ANGLE: 155,
   EXTENDED_DIP_ANGLE: 150,
-  CURLED_PIP_ANGLE: 135,
-  CURLED_DIP_ANGLE: 145,
-  CURLED_PLANAR_JOINT_ANGLE: 150,
-  CURLED_TIP_TO_CHAIN_RATIO: 0.72,
-  FIST_MAX_TIP_EXTENSION_PALM_RATIO: 0.35,
+  CURLED_JOINT_ANGLE: 150,
+  CURLED_TOTAL_FLEXION_ANGLE: 60,
+  CURLED_TIP_TO_CHAIN_RATIO: 0.65,
+  FIST_MAX_AVERAGE_TIP_EXTENSION_PALM_RATIO: 0.35,
+  FIST_CLOSE_TIP_EXTENSION_PALM_RATIO: 0.55,
+  FIST_MIN_CLOSE_TIP_COUNT: 3,
   FIST_IDEAL_TIP_EXTENSION_PALM_RATIO: 0.1,
   FIST_LOW_QUALITY_TIP_EXTENSION_PALM_RATIO: 0.6,
   MIN_GEOMETRY_LENGTH: 0.001,
@@ -30,16 +31,22 @@ export function getVSignSeparation(hand) {
 }
 
 export function getFingerStates(hand) {
-  const states = Object.fromEntries(
-    Object.entries(FINGERS).map(([name, indices]) => [name, getMainFingerState(hand, indices)]),
+  return Object.fromEntries(
+    Object.entries(getFingerDiagnostics(hand)).map(([name, diagnostics]) => [name, diagnostics.state]),
   )
-  states.THUMB = getThumbState(hand)
-  return states
 }
 
-// Largest fingertip projection past its MCP along the wrist-to-knuckles axis.
-// A folded fingertip stays near the palm; the ratio is invariant to hand size and rotation.
-export function getFistTipExtension(hand) {
+export function getFingerDiagnostics(hand) {
+  const diagnostics = Object.fromEntries(
+    Object.entries(FINGERS).map(([name, indices]) => [name, getMainFingerDiagnostics(hand, indices)]),
+  )
+  diagnostics.THUMB = getThumbDiagnostics(hand)
+  return diagnostics
+}
+
+// Fingertip projections past their MCPs along the palm axis. A folded fingertip
+// stays near the palm; the aggregate avoids rejecting a fist for one noisy tip.
+export function getFistTipMetrics(hand) {
   const wrist = hand[0]
   const knuckles = [5, 9, 13, 17]
   const palmAxis = knuckles.reduce((sum, index) => ({
@@ -48,9 +55,11 @@ export function getFistTipExtension(hand) {
     z: sum.z + ((hand[index].z ?? 0) - (wrist.z ?? 0)) / knuckles.length,
   }), { x: 0, y: 0, z: 0 })
   const palmLengthSquared = palmAxis.x ** 2 + palmAxis.y ** 2 + palmAxis.z ** 2
-  if (palmLengthSquared < FINGER_STATE_THRESHOLDS.MIN_GEOMETRY_LENGTH ** 2) return Infinity
+  if (palmLengthSquared < FINGER_STATE_THRESHOLDS.MIN_GEOMETRY_LENGTH ** 2) {
+    return { averageExtension: Infinity, closeTipCount: 0, tipExtensions: [] }
+  }
 
-  return Math.max(...knuckles.map((baseIndex) => {
+  const tipExtensions = knuckles.map((baseIndex) => {
     const base = hand[baseIndex]
     const tip = hand[baseIndex + 3]
     return (
@@ -58,16 +67,23 @@ export function getFistTipExtension(hand) {
       (tip.y - base.y) * palmAxis.y +
       ((tip.z ?? 0) - (base.z ?? 0)) * palmAxis.z
     ) / palmLengthSquared
-  }))
+  })
+  return {
+    averageExtension: tipExtensions.reduce((sum, value) => sum + value, 0) / tipExtensions.length,
+    closeTipCount: tipExtensions.filter(
+      (value) => value <= FINGER_STATE_THRESHOLDS.FIST_CLOSE_TIP_EXTENSION_PALM_RATIO,
+    ).length,
+    tipExtensions,
+  }
 }
 
-function getMainFingerState(hand, [baseIndex, pipIndex, dipIndex, tipIndex]) {
+function getMainFingerDiagnostics(hand, [baseIndex, pipIndex, dipIndex, tipIndex]) {
   const [base, pip, dip, tip] = [baseIndex, pipIndex, dipIndex, tipIndex].map((index) => hand[index])
   const baseToPip = distance(base, pip, true)
   const pipToDip = distance(pip, dip, true)
   const dipToTip = distance(dip, tip, true)
   if (Math.min(baseToPip, pipToDip, dipToTip) < FINGER_STATE_THRESHOLDS.MIN_GEOMETRY_LENGTH) {
-    return 'PARTIAL'
+    return { state: 'PARTIAL' }
   }
 
   const pipAngle = angleDegrees(base, pip, dip, false)
@@ -75,28 +91,31 @@ function getMainFingerState(hand, [baseIndex, pipIndex, dipIndex, tipIndex]) {
   const pipAngle3d = angleDegrees(base, pip, dip, true)
   const dipAngle3d = angleDegrees(pip, dip, tip, true)
   const tipToChain = distance(base, tip, true) / (baseToPip + pipToDip + dipToTip)
+  const totalFlexion = Math.max(0, 360 - pipAngle3d - dipAngle3d)
 
   // A straight 2D trace remains extended even if noisy depth bends the 3D trace.
   // The 3D angles also protect a straight finger seen from an oblique camera view.
+  let state = 'PARTIAL'
   if (
     (pipAngle >= FINGER_STATE_THRESHOLDS.EXTENDED_PIP_ANGLE &&
       dipAngle >= FINGER_STATE_THRESHOLDS.EXTENDED_DIP_ANGLE) ||
     (pipAngle3d >= FINGER_STATE_THRESHOLDS.EXTENDED_PIP_ANGLE &&
       dipAngle3d >= FINGER_STATE_THRESHOLDS.EXTENDED_DIP_ANGLE)
-  ) return 'EXTENDED'
+  ) state = 'EXTENDED'
 
-  // Both joints must bend; projected bend and fingertip travel corroborate it.
-  if (
-    pipAngle3d <= FINGER_STATE_THRESHOLDS.CURLED_PIP_ANGLE &&
-    dipAngle3d <= FINGER_STATE_THRESHOLDS.CURLED_DIP_ANGLE &&
-    Math.min(pipAngle, dipAngle) <= FINGER_STATE_THRESHOLDS.CURLED_PLANAR_JOINT_ANGLE &&
+  // Natural fists often have one strongly folded joint and one nearly straight
+  // distal joint. Total flexion plus fingertip travel captures that shape without
+  // accepting a merely bent finger.
+  if (state !== 'EXTENDED' &&
+    Math.min(pipAngle3d, dipAngle3d) <= FINGER_STATE_THRESHOLDS.CURLED_JOINT_ANGLE &&
+    totalFlexion >= FINGER_STATE_THRESHOLDS.CURLED_TOTAL_FLEXION_ANGLE &&
     tipToChain <= FINGER_STATE_THRESHOLDS.CURLED_TIP_TO_CHAIN_RATIO
-  ) return 'CURLED'
+  ) state = 'CURLED'
 
-  return 'PARTIAL'
+  return { state, pipAngle, dipAngle, pipAngle3d, dipAngle3d, totalFlexion, tipToChain }
 }
 
-function getThumbState(hand) {
+function getThumbDiagnostics(hand) {
   const base = hand[1]
   const mcp = hand[2]
   const ip = hand[3]
@@ -106,15 +125,16 @@ function getThumbState(hand) {
   const tipToBase = distance(base, tip, true) /
     Math.max(distance(base, mcp, true), FINGER_STATE_THRESHOLDS.MIN_GEOMETRY_LENGTH)
 
+  let state = 'PARTIAL'
   if (
     mcpAngle >= FINGER_STATE_THRESHOLDS.THUMB_EXTENDED_JOINT_ANGLE &&
     ipAngle >= FINGER_STATE_THRESHOLDS.THUMB_EXTENDED_JOINT_ANGLE
-  ) return 'EXTENDED'
-  if (
+  ) state = 'EXTENDED'
+  else if (
     Math.min(mcpAngle, ipAngle) <= FINGER_STATE_THRESHOLDS.THUMB_CURLED_JOINT_ANGLE ||
     tipToBase <= FINGER_STATE_THRESHOLDS.THUMB_CURLED_TIP_TO_BASE_RATIO
-  ) return 'CURLED'
-  return 'PARTIAL'
+  ) state = 'CURLED'
+  return { state, mcpAngle, ipAngle, tipToBase }
 }
 
 function distance(first, second, useDepth) {

@@ -10,6 +10,7 @@ const SHAPES = {
   extended: [[0, -0.10], [0, -0.20], [0, -0.30]],
   partial: [[0, -0.10], [0.075, -0.155], [0.15, -0.17]],
   curled: [[0, -0.10], [0.065, -0.075], [0.025, -0.01]],
+  naturalFist: [[0, -0.10], [0.05, -0.05], [0.10, 0]],
 }
 
 function makeHand(fingers, scale = 1) {
@@ -87,6 +88,18 @@ test('all four curled fingers form FIST regardless of thumb and hand scale', () 
     assert.equal(engine.stableGesture, GESTURES.FIST)
     assert.equal(feedback.state, 'success')
   }
+})
+
+test('a natural fist remains curled when distal joints are nearly straight', () => {
+  const hand = makeHand(['naturalFist', 'naturalFist', 'naturalFist', 'naturalFist'])
+  assert.deepEqual(
+    Object.values(getFingerStates(hand)).slice(0, 4),
+    ['CURLED', 'CURLED', 'CURLED', 'CURLED'],
+  )
+  const engine = new GestureEngine()
+  assert.equal(engine.update([hand], 0), GESTURES.NONE)
+  assert.equal(engine.update([hand], 33), GESTURES.NONE)
+  assert.equal(engine.update([hand], 66), GESTURES.FIST)
 })
 
 test('rotating the hand in the image does not change finger states', () => {
