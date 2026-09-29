@@ -100,7 +100,7 @@ the app explains how to fix it.
 
 ## M6 - Combat Prototype
 
-Status: TODO
+Status: DONE
 
 Use VEX first.
 
