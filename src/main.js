@@ -3,7 +3,7 @@ import { startCamera, stopCamera } from './camera.js'
 import { GESTURES } from './gesture-engine.js'
 import { TwoHandInput } from './two-hand-input.js'
 import { startHandTracking } from './hand-tracker.js'
-import { GestureNavigation } from './gesture-navigation.js'
+import { GestureNavigation, NAVIGATION_MIN_QUALITY } from './gesture-navigation.js'
 import { CombatGame, GAME_STATES } from './game/combat.js'
 import { CombatView } from './game/combat-view.js'
 import { getHero, abilityLegend } from './game/heroes.js'
@@ -222,15 +222,19 @@ function updateGestureDisplay(landmarks, handedness, timestamp) {
     combatGame.acceptHands({ LEFT: hands.LEFT.gesture, RIGHT: hands.RIGHT.gesture }, timestamp)
   }
 
-  if (hands[cursorHandSide].gesture !== GESTURES.POINT) {
-    cursorHandSide = hands.LEFT.gesture === GESTURES.POINT ? 'LEFT' : 'RIGHT'
+  const navigationPoint = (hand) => hand.gesture === GESTURES.POINT &&
+    hand.debug.rawGesture === GESTURES.POINT && hand.feedback.quality >= NAVIGATION_MIN_QUALITY
+  if (!navigationPoint(hands[cursorHandSide])) {
+    const otherSide = cursorHandSide === 'LEFT' ? 'RIGHT' : 'LEFT'
+    if (navigationPoint(hands[otherSide])) cursorHandSide = otherSide
   }
   const cursorHand = hands[cursorHandSide]
   gestureNavigation.update({
     gesture: cursorHand.gesture,
+    rawGesture: cursorHand.debug.rawGesture,
+    quality: cursorHand.feedback.quality,
     indexTip: cursorHand.landmarks?.[8],
     timestamp,
-    videoElement,
   })
 }
 
