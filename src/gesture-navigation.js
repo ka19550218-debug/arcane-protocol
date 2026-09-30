@@ -90,6 +90,7 @@ export class GestureNavigation {
         this.resetDwell()
       }
       this.lastDwellTimestamp = null
+      this.cursor.classList.add('is-recovering')
       if (lossExpired) {
         this.hideCursor()
         this.updateHeroHover(null)
@@ -114,6 +115,8 @@ export class GestureNavigation {
     const hoveredButton = this.lockedUntilPointRelease ? null : this.getHoveredButton(position, bounds)
     this.updateHeroHover(this.lockedUntilPointRelease ? null : position, hoveredButton, bounds)
     this.showCursor(position)
+    this.cursor.classList.toggle('is-recovering', recovering)
+    this.cursor.classList.toggle('is-locked', this.lockedUntilPointRelease)
 
     if (this.lockedUntilPointRelease) {
       this.updateHeroHover(null)
@@ -151,6 +154,18 @@ export class GestureNavigation {
     if (progress === 1) {
       this.activate(hoveredButton, 'dwell')
     }
+  }
+
+  tick(timestamp) {
+    // A stalled video produces no missing-hand callback. Expire that stale UI
+    // from the existing render loop, without extrapolating or moving the cursor.
+    if (this.lastPointTimestamp === null || !this.cursor.classList.contains('is-visible') ||
+      timestamp - (this.pointLostAt ?? this.lastPointTimestamp) < POINT_LOST_GRACE_MS) return
+    this.pointLostAt ??= this.lastPointTimestamp
+    this.pointActive = false
+    this.hideCursor()
+    this.updateHeroHover(null)
+    this.resetDwell()
   }
 
   getBounds() {

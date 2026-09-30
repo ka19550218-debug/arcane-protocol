@@ -1,0 +1,355 @@
+/* Final art direction. Shared geometry and live state are owned by existing modules. */
+:root { --font-display: Impact, 'Arial Narrow', 'Helvetica Neue', sans-serif; --color-primary: #87dddd; --color-text: #ecede5; --radius-md: 0; --radius-sm: 0; }
+#app { padding: 18px 24px; background: radial-gradient(ellipse at 38% 0, #17262d, #080e14 60%); }
+.app-shell { width: min(1680px, 100%); }
+.game-header { margin-bottom: 14px; padding-bottom: 12px; }
+.game-header h1 { font-size: 20px; letter-spacing: .07em; }
+.eyebrow { font-size: 8px; letter-spacing: .22em; }
+.state-badge { padding: 9px 12px; font-size: 9px; }
+.game-layout { grid-template-columns: minmax(0, 1fr) 254px; gap: 14px; }
+.stage-frame, .main-stage { min-height: 650px; }
+.stage-frame { background: #091119; border-color: #35454f; box-shadow: 0 18px 50px #0005; }
+.story-screen { min-height: 650px; padding: 34px; }
+.story-screen h2, .training-screen h2 { font-family: var(--font-display); font-weight: 800; letter-spacing: .025em; line-height: .98; }
+.screen-kicker { font-size: 9px; }
+.screen-kicker::before, .screen-kicker::after { content: none; }
+.gesture-button { border-color: #476267; background: #12242b; border-radius: 0; }
+.gesture-button:focus-visible { outline: 2px solid #fff7c8; outline-offset: 4px; }
+.gesture-button.is-dwelling { box-shadow: inset 3px 0 #acfff0, 0 0 0 1px #acfff050; }
+.gesture-button-progress { background: linear-gradient(90deg, #78d7c647, #78d7c612); }
+.gesture-button:not(:disabled):hover, .gesture-button.is-dwelling { background-color: #203b40; }
+.navigation-hint { color: #9baeb5; font-size: 9px; line-height: 1.8; }
+/* The landing composition is asymmetric: identity and operative, then four destinations. */
+.menu-screen { display: grid; grid-template-columns: 1.05fr 1fr; grid-template-rows: 1fr auto; gap: 26px; align-content: stretch; align-items: center; justify-items: stretch; padding: 42px 38px 24px; text-align: left; background: #091118; }
+.menu-screen::before { background: linear-gradient(90deg, #07111b00, #070d14aa), repeating-linear-gradient(0deg, transparent 0 5px, #e3f4f504 5px 6px); }
+.menu-screen::after { inset: 15px; }
+.menu-identity { position: relative; align-self: start; z-index: 2; padding-top: 18px; }
+.menu-screen h2 { font-size: clamp(62px, 6.8vw, 116px); color: #edf0e7; line-height: .83; letter-spacing: -.025em; text-shadow: 0 4px 20px #061018; }
+.menu-screen h2 span { margin-top: 10px; font-size: .67em; color: #93d7d5; letter-spacing: .04em; }
+.menu-identity .screen-kicker { margin-bottom: 23px; color: #9daeb2; letter-spacing: .16em; }
+.menu-manifesto { margin-top: 24px; font-size: 10px; font-weight: 700; letter-spacing: .13em; line-height: 1.8; color: #d2dcd9; }
+.menu-system { display: grid; gap: 7px; margin-top: 200px; width: 250px; padding-left: 10px; border-left: 2px solid #63868a; font-size: 8px; letter-spacing: .12em; }
+.menu-system span { display: flex; justify-content: space-between; color: #85989f; }
+.menu-system b { color: #9fddc1; font-weight: 500; }
+.menu-system .signal-warning { color: #eba786; }
+.menu-world { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.menu-operative { position: absolute; left: 13%; bottom: -54px; width: 410px; opacity: .8; transform: rotate(-5deg); }
+.menu-operative::after { position: absolute; inset: 50% 0 0; content: ''; background: linear-gradient(transparent, #091118); }
+.menu-orbit { top: 26%; left: 30%; width: 530px; border-color: #74d7e517; }
+.menu-floor { position: absolute; inset: 70% -40% -50%; background-image: linear-gradient(#88c7c322 1px, transparent 1px), linear-gradient(90deg, #88c7c322 1px, transparent 1px); background-size: 52px 52px; transform: perspective(180px) rotateX(45deg); }
+.mode-panels { display: grid; gap: 12px; z-index: 2; }
+.menu-screen .mode-panel { width: 100%; min-height: 110px; border: 1px solid #4a626b; border-left: 2px solid #83b5b5; background: linear-gradient(110deg, #172b33ed, #0b171ff5); clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); }
+.menu-screen .mode-panel > span:first-child { display: flex; align-items: center; gap: 16px; padding: 20px 18px; }
+.menu-screen .gesture-button > span:first-child::before { content: none; }
+.mode-number { align-self: start; color: #799b9e; font-size: 12px; line-height: 1.2; font-weight: 400; }
+.mode-copy { display: grid; gap: 7px; }
+.mode-copy small { font-size: 8px; letter-spacing: .15em; color: #93b3b6; }
+.mode-copy strong { font-family: var(--font-display); font-size: 29px; font-weight: 700; color: #e5eee7; letter-spacing: .035em; line-height: 1; }
+.mode-copy em { font-size: 9px; line-height: 1.5; font-style: normal; letter-spacing: 0; font-weight: 400; color: #9caeb5; }
+.mode-arrow { margin-left: auto; color: #aac6c3; font-size: 21px; transition: transform 160ms; }
+.mode-panel.is-dwelling .mode-arrow, .mode-panel:hover .mode-arrow { transform: translate(3px, -3px); }
+.mode-panel.is-dwelling .mode-number { color: #bafce1; }
+.mode-panels > div:nth-child(2) .mode-panel { border-left-color: #cd907d; }
+.mode-panels > div:nth-child(3) .mode-panel { border-left-color: #9cafcc; }
+.menu-footer { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #34464c; padding-top: 14px; z-index: 2; }
+.menu-footer .navigation-hint { max-width: none; margin: 0; }
+.menu-footer .gesture-button { min-height: 42px; border: 1px solid #3e545c; font-size: 9px; background: #0c1a22; }
+.menu-footer .gesture-button > span:first-child { padding: 13px 16px; }
+/* Larger, original local operative illustrations in selection and arena. */
+.hero-screen { padding: 28px 24px; }
+.hero-screen h2 { font-size: clamp(32px, 3.6vw, 56px); }
+.hero-grid { width: 100%; margin-top: 24px; gap: 12px; }
+.hero-card { min-height: 470px; padding: 14px; gap: 10px; border-color: #3a505b; box-shadow: none; background: linear-gradient(160deg, rgba(var(--hero-rgb), .06), #09131a); }
+.hero-visual { height: 238px; margin: 0 -14px; border: 0; border-block: 1px solid rgba(var(--hero-rgb), .17); background: radial-gradient(ellipse at 50% 50%, rgba(var(--hero-rgb), .11), transparent 65%); }
+.operative-portrait { width: 255px; position: absolute; top: -8px; left: 50%; transform: translateX(-50%); transition: translate 200ms ease; }
+.operative-art { display: block; width: 100%; height: 100%; overflow: visible; }
+.art-body { animation: operative-breathe 4s ease-in-out infinite; transform-origin: 50% 90%; }
+.art-core { animation: core-breathe 3s ease-in-out infinite; }
+.art-fragments { animation: echo-fragment 4s steps(2, end) infinite; }
+.hero-card.is-point-hovered .operative-portrait, .hero-card:hover .operative-portrait { translate: 0 -7px; }
+.hero-card-copy p { font-family: var(--font-display); font-size: 42px; letter-spacing: .025em; text-shadow: none; }
+.hero-card-copy strong { font-size: 10px; letter-spacing: .18em; }
+.hero-card-copy > span { min-height: 28px; font-size: 9px; }
+.hero-card-abilities span { display: flex; align-items: center; gap: 7px; }
+.hero-card .gesture-button { min-height: 46px; }
+.hero-screen .screen-copy { margin-top: 15px; font-size: 11px; }
+.hero-screen .navigation-hint { margin-top: 8px; }
+.gesture-prompt-icon svg { width: 94px; height: 94px; margin: auto; }
+.gesture-prompt { margin-top: 24px; }
+/* Arena takes priority over sensor telemetry. */
+.combat-panel { padding: 14px; border: 0; min-height: 650px; }
+.combat-topline { font-size: 8px; padding-bottom: 10px; letter-spacing: .12em; }
+.combat-hud { grid-template-columns: minmax(0,1fr) 115px minmax(0,1fr); gap: 16px; margin: 15px 0; }
+.combat-hud .player-status, .combat-hud .boss-status { padding: 10px; background: #0b161e; border-block: 0; }
+.combat-hud .stat-label { font-size: 11px; letter-spacing: .05em; }
+.combat-hud .stat-label strong { font-size: 10px; }
+.combat-hud small { font-size: 8px; color: #b0c4c8; }
+.arena { min-height: 370px; background: radial-gradient(ellipse at 50% 100%, #254553 0%, #0b1723 58%, #070e16); }
+.arena-grid { opacity: .28; }
+.fighters { margin-top: 60px; padding-bottom: 24px; align-items: end; }
+.illustrated-fighter { height: 275px; width: 205px; animation: none; filter: none; transform: none; }
+.illustrated-fighter::before, .illustrated-fighter::after { display: none; }
+.illustrated-fighter > .operative-art { height: 100%; width: 100%; }
+.illustrated-fighter > span { bottom: -8px; padding: 5px 12px; border: 1px solid #4c6463; background: #06101ce6; font-size: 9px; }
+.fighter-warden.illustrated-fighter { width: 238px; height: 302px; }
+.fighter-echo.illustrated-fighter { width: 220px; height: 290px; }
+.boss-impact .art-core { animation: impact-core 450ms ease-out both; }
+.boss-critical .art-core { animation: core-breathe 700ms ease-in-out infinite; }
+.shield-active .fighter-player .art-orbit { opacity: .9; }
+.time-frozen .fighter-player .art-temporal { opacity: 1; }
+.warning-panel { width: min(365px, 90%); top: 27px; gap: 1px; padding: 8px 12px; background: #24141af5; box-shadow: 0 8px 30px #0008; }
+.warning-panel strong { font-family: var(--font-display); font-size: 23px; letter-spacing: .06em; }
+.warning-response { min-height: 39px; }
+.warning-response span { font-size: 30px; }
+.warning-response b { font-size: 20px; }
+.warning-countdown { position: absolute; right: 9px; top: 8px; min-width: 0; padding: 3px 6px; font-size: 16px; }
+.warning-eyebrow { font-size: 8px; padding-right: 34px; }
+.warning-use { font-size: 8px; }
+.combat-controls { gap: 8px; margin-top: 10px; }
+.combat-controls p { min-height: 58px; background: #102029; border-color: #3b5058; }
+.combat-controls p > strong { font-size: 10px; }
+.combat-panel .super-meter { margin: 10px 0; padding: 10px; }
+.combat-feedback { font-size: 10px; min-height: 32px; padding: 9px; }
+.combat-status { min-height: 20px; }
+.combat-cinematic strong { font-family: var(--font-display); font-size: clamp(40px, 6vw, 82px); letter-spacing: .025em; }
+.combat-cinematic { z-index: 4; } /* Threat response stays legible during a Super. */
+.boss-intro strong, .final-impact strong { font-family: var(--font-display); letter-spacing: .025em; }
+.first-combat-controls { animation-duration: 4.5s; }
+.floating-combat-text { text-shadow: 0 2px 4px #000; }
+[data-visual-effect^="super-"] .art-core { animation: super-core 950ms ease-out both; }
+[data-visual-effect^="attack-"] .fighter-player .art-core { animation: attack-charge 420ms ease-out both; }
+[data-visual-effect^="dodge-"] .fighter-nex { filter: drop-shadow(18px 0 #98efb744); }
+[data-visual-effect^="dodge-"] .fighter-aeris { filter: drop-shadow(18px 0 #c6b4ff44); }
+/* Compact shared camera, full-size diagnostics inside training. */
+.tracking-panel { padding: 12px; border-color: #354950; background: #0b151d; box-shadow: none; }
+.tracking-heading { font-size: 8px; letter-spacing: .08em; }
+.camera-frame { aspect-ratio: 4 / 3; box-shadow: none; border-color: #4d7379; }
+.camera-feed, .hand-overlay { object-fit: contain; }
+.camera-corner { font-size: 7px; }
+.corner-bottom { display: none; }
+.tracking-readout { padding: 8px; }
+.link-telemetry strong { font-size: 10px; }
+.gesture-quality { padding: 10px; }
+.gesture-quality-score { font-size: 25px; }
+.quality-readout { grid-template-columns: 49px minmax(0,1fr); }
+.quality-readout > strong { font-size: 9px; }
+.finger-checks span { font-size: 8px; letter-spacing: 0; }
+.finger-checks .is-partial { border-color: #cda65a; color: #f4d199; background: #342b1c; }
+.finger-checks .needs-fix:not(.is-partial) { border-color: #ab6869; color: #f4b4ab; background: #2a1c20; }
+.controls-guide p { font-size: 8px; padding: 7px 0; letter-spacing: 0; }
+.controls-guide strong { max-width: 56%; }
+.controls-guide span { text-align: right; }
+.tracking-diagnostics { display: none; }
+.app-shell[data-screen^="training"] .controls-guide, .app-shell[data-screen="free_practice"] .controls-guide,
+.app-shell[data-screen^="training"] .controls-label, .app-shell[data-screen="free_practice"] .controls-label,
+.app-shell[data-screen^="training"] .shield-status, .app-shell[data-screen="free_practice"] .shield-status { display: none; }
+/* Training Center */
+.training-screen { position: relative; min-height: 650px; padding: 28px; background: radial-gradient(ellipse at 10% 0, #16303966, transparent 60%), #09131b; }
+.training-screen h2 { margin: 0; font-size: clamp(30px, 3.8vw, 54px); color: #e7eee7; }
+.training-screen h2 span { color: #85d6d6; }
+.lab-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.lab-heading .gesture-button { min-height: 43px; font-size: 9px; }
+.lab-heading .screen-kicker { color: #95aeb5; }
+.lab-counter { margin: 0; font-size: 33px; color: #b3decf; }
+.lab-counter span { display: block; font-size: 8px; color: #93a9ae; }
+.lab-copy { margin: 14px 0 22px; color: #a7bcc3; font-size: 11px; line-height: 1.7; }
+.training-modules { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+.training-module { padding: 13px; border: 1px solid #395660; background: linear-gradient(135deg, #152b3450, #0a141d); }
+.module-top { display: flex; justify-content: space-between; gap: 5px; color: #8eb2b6; font-size: 7px; letter-spacing: .04em; }
+.module-top span:last-child { color: #a8dbc5; }
+.module-art { height: 81px; margin: 10px 0 4px; color: #97ddd7; }
+.module-art svg { height: 100%; display: block; margin: auto; }
+.training-module p { min-height: 28px; margin: 6px 0 10px; color: #9eb4bd; font-size: 9px; line-height: 1.5; }
+.training-module .gesture-button { width: 100%; min-height: 40px; font-size: 11px; }
+.training-module .gesture-button > span:first-child { padding: 11px 8px; }
+.lab-footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; }
+.lab-footer .gesture-button { min-height: 44px; font-size: 10px; }
+.pose-exercise { display: flex; align-items: center; gap: 30px; padding: 20px 25px; border: 1px solid #42626b; background: linear-gradient(105deg,#213e4355, #0a161e); }
+.pose-art { width: 150px; height: 150px; color: #a5e8de; flex-shrink: 0; }
+.pose-coaching { display: grid; flex: 1; gap: 12px; }
+.pose-coaching > strong { font-size: 17px; color: #d1eee0; }
+.pose-coaching .screen-kicker { margin: 0; }
+.pose-coaching > span:last-child { color: #a9bfc5; font-size: 10px; }
+.repetition-pips { display: flex; gap: 8px; }
+.repetition-pips i { width: 50px; height: 7px; border: 1px solid #577575; }
+.repetition-pips .is-verified { background: #9deac8; border-color: #9deac8; animation: verified-pulse 450ms ease-out; }
+.hold-track { height: 4px; overflow: hidden; background: #293e47; }
+.hold-track span { display: block; height: 100%; background: #a3e6d4; transform: scaleX(0); transform-origin: left; }
+.hand-analyzers { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
+.hand-analyzer { padding: 14px; border: 1px solid #3d555d; background: #0e1d27; }
+.analyzer-heading { display: flex; justify-content: space-between; align-items: center; color: #a4bbc0; font-size: 11px; letter-spacing: .1em; }
+.analyzer-heading strong { font-size: 28px; color: #b9d0d1; letter-spacing: -.04em; }
+.analyzer-readings { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0; color: #809aa5; font-size: 8px; }
+.analyzer-readings b { display: block; margin-top: 4px; color: #dbe9e5; font-size: 10px; }
+.analyzer-fingers { display: grid; grid-template-columns: repeat(4,1fr); gap: 4px; }
+.analyzer-fingers > span { padding: 7px 3px; border: 1px solid #3c515a; text-align: center; }
+.analyzer-fingers small { display: block; font-size: 7px; color: #96b1ba; }
+.analyzer-fingers b { display: block; margin-top: 5px; font-size: 8px; color: #c7d9d8; }
+.analyzer-fingers [data-state="PARTIAL"] { border-color: #a1864a; background: #302b1b; }
+.analyzer-fingers [data-state="PARTIAL"] b { color: #ffe1a1; }
+.analyzer-correction { min-height: 34px; padding-top: 10px; margin: 12px 0 0; border-top: 1px solid #344851; color: #a7bac1; font-size: 10px; line-height: 1.6; }
+.hand-analyzer[data-state="correcting"] { border-left: 3px solid #dca377; }
+.hand-analyzer[data-state="correcting"] .analyzer-correction { color: #ffd29e; }
+.hand-analyzer[data-state="success"] { border-left: 3px solid #91d8b3; }
+.hand-analyzer[data-state="success"] .analyzer-heading strong { color: #a9efcc; }
+.lab-footnote { margin-top: 16px; color: #7f9ca8; font-size: 8px; line-height: 1.6; letter-spacing: .04em; }
+.point-field { position: relative; height: 300px; border: 1px solid #385961; background: radial-gradient(ellipse, #18353c, #0b171f 65%); }
+.point-position { position: absolute; transform: translate(-50%, -50%); z-index: 2; }
+.point-target { width: 74px; height: 74px; border: 1px solid #a2e1d7; border-radius: 50%; background: #102a32; }
+.point-target > span:first-child { padding: 6px; }
+.point-target b { display: block; font-size: 23px; }
+.point-target small { display: block; font-size: 7px; }
+.point-target:disabled { opacity: .2; background: #0c1820; }
+.point-position.is-verified .point-target { opacity: .6; color: #a5f0cb; border-color: #a5f0cb; animation: verified-pulse 450ms ease-out; }
+.point-axis { position: absolute; background: #638c872a; pointer-events: none; }
+.axis-x { top: 50%; left: 5%; right: 5%; height: 1px; }
+.axis-y { left: 50%; top: 5%; bottom: 5%; width: 1px; }
+.point-field > p { position: absolute; top: 8px; left: 12px; margin: 0; font-size: 8px; color: #a0c7c7; }
+.point-session .hand-analyzers { margin-top: 12px; }
+.point-session .analyzer-fingers { display: none; }
+.point-session .analyzer-correction { min-height: 0; margin-top: 5px; padding-top: 6px; }
+.point-session .analyzer-readings { margin: 6px 0; }
+.gesture-roster { display: grid; grid-template-columns: repeat(6,1fr); gap: 8px; }
+.gesture-roster > div { padding: 12px 5px; border: 1px solid #3b525a; text-align: center; color: #809da5; }
+.gesture-roster svg { display: block; width: 65px; max-width: 100%; margin: auto; }
+.gesture-roster span { display: block; margin-top: 8px; font-size: 8px; }
+.gesture-roster .is-active, .lab-combos .is-active { color: #b2f2ce; background: #193f35; border-color: #9de2be; }
+.lab-combos { display: flex; gap: 7px; margin-top: 15px; }
+.lab-combos span { flex: 1; padding: 12px 7px; border: 1px solid #36535e; color: #92a9b1; font-size: 8px; text-align: center; }
+.training-complete { display: grid; align-content: center; justify-items: center; text-align: center; }
+.mastery-seal { height: 150px; width: 150px; margin: 12px 0 22px; color: #a9ebc7; animation: mastery-arrival 600ms ease-out both; }
+.mastery-name { color: #a0ddd5; font-size: 16px; letter-spacing: .18em; }
+.completion-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.completion-actions .gesture-button { min-width: 140px; font-size: 10px; }
+/* Cursor state never changes its positioning transform. */
+.virtual-cursor { --cursor-dwell: 0; width: 30px; height: 30px; border: 1px solid #d7f5ec; box-shadow: 0 0 0 4px #06131b99; filter: none; }
+.virtual-cursor::before { width: 40px; opacity: .55; }
+.virtual-cursor::after { width: 40px; opacity: .55; }
+.virtual-cursor.is-recovering { opacity: .45; border-style: dashed; }
+.virtual-cursor.is-locked { border-color: #efbe8c; background: #243038; }
+.virtual-cursor.is-locked .virtual-cursor-dot::after { border-color: #efbe8c; }
+.records-screen { justify-content: stretch; }
+.records-table { width: 100%; max-height: none; }
+.records-row { padding: 12px 16px; }
+.records-head { background: #20383d; }
+.result-screen.is-defeat::before { background: repeating-linear-gradient(0deg,transparent 0 8px,#f77c8208 8px 9px),radial-gradient(ellipse,#4c242c66,transparent 70%); }
+@keyframes operative-breathe { 50% { transform: translateY(-3px); } }
+@keyframes verified-pulse { 50% { box-shadow: 0 0 0 6px #a5f0cb22; } }
+@keyframes mastery-arrival { from { opacity: 0; transform: scale(.8) rotate(-12deg); } to { opacity: 1; transform: none; } }
+@media (min-width: 1001px) and (max-height: 800px) {
+  #app { padding: 12px 18px; }
+  .game-header { margin-bottom: 10px; }
+  .stage-frame, .main-stage, .story-screen, .training-screen, .combat-panel { min-height: 590px; }
+  .menu-screen { padding: 28px 28px 20px; gap: 20px; }
+  .menu-identity { padding-top: 10px; }
+  .menu-system { margin-top: 170px; }
+  .menu-screen .mode-panel { min-height: 98px; }
+  .menu-screen .mode-panel > span:first-child { padding: 16px; }
+  .hero-screen { padding: 24px; }
+  .hero-grid { margin-top: 18px; }
+  .hero-card { min-height: 418px; padding: 12px; gap: 8px; }
+  .hero-visual { height: 191px; margin-inline: -12px; }
+  .operative-portrait { width: 230px; top: -9px; }
+  .hero-card-copy p { font-size: 35px; }
+  .arena { min-height: 308px; }
+  .fighters { margin-top: 30px; padding-bottom: 22px; }
+  .illustrated-fighter { height: 242px; width: 185px; }
+  .fighter-warden.illustrated-fighter { height: 260px; width: 205px; }
+  .fighter-echo.illustrated-fighter { height: 256px; width: 195px; }
+  .training-screen { padding: 24px; }
+  .training-module { padding: 10px; }
+  .module-art { height: 65px; }
+  .point-field { height: 265px; }
+  .pose-exercise { padding: 14px 20px; }
+}
+@media (max-width: 1150px) and (min-width: 801px) {
+  .game-layout { grid-template-columns: minmax(0,1fr) 220px; gap: 10px; }
+  .menu-screen { padding: 28px 22px 20px; gap: 16px; }
+  .menu-screen h2 { font-size: 64px; }
+  .menu-screen .mode-panel > span:first-child { padding: 16px 12px; gap: 10px; }
+  .mode-copy strong { font-size: 25px; }
+  .mode-copy em { font-size: 8px; }
+  .mode-arrow { display: none; }
+  .menu-operative { left: 2%; width: 360px; }
+  .menu-system { width: 220px; }
+  .hero-card-copy p { font-size: 33px; }
+  .hero-card-topline { font-size: 7px; letter-spacing: 0; }
+  .training-screen { padding: 20px; }
+  .analyzer-fingers { grid-template-columns: repeat(2,1fr); }
+  .pose-coaching > strong { font-size: 13px; }
+}
+@media (max-width: 800px) {
+  #app { padding: 12px; }
+  .game-layout { grid-template-columns: 1fr; }
+  .tracking-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tracking-heading { grid-column: 1 / -1; }
+  .tracking-panel .controls-guide, .tracking-panel .controls-label { display: none; }
+  .camera-frame { grid-row: span 3; }
+  .tracking-readout { margin: 0; }
+  .menu-screen { padding: 32px 24px 24px; }
+  .menu-screen h2 { font-size: 66px; }
+  .menu-system { width: 220px; }
+  .mode-copy strong { font-size: 24px; }
+  .menu-operative { left: 1%; width: 350px; }
+  .hero-card { min-height: 440px; }
+  .hero-visual { height: 210px; }
+}
+@media (max-width: 560px) {
+  .menu-screen { grid-template-columns: 1fr; }
+  .menu-identity { min-height: 265px; }
+  .menu-screen h2 { font-size: 78px; }
+  .menu-operative { left: 38%; top: 28px; width: 290px; }
+  .menu-manifesto { font-size: 8px; }
+  .menu-system { margin-top: 20px; font-size: 7px; }
+  .menu-screen .mode-panel { min-height: 88px; }
+  .menu-footer { gap: 10px; }
+  .menu-footer .navigation-hint { font-size: 7px; }
+  .hero-grid { grid-template-columns: 1fr; }
+  .hero-card { min-height: 410px; }
+  .training-modules { grid-template-columns: 1fr 1fr; }
+  .hand-analyzers { grid-template-columns: 1fr; }
+  .training-screen { padding: 20px; }
+  .lab-heading { align-items: start; }
+  .training-screen h2 { font-size: 29px; }
+  .pose-exercise { gap: 15px; padding: 12px; }
+  .pose-art { width: 90px; height: 100px; }
+  .pose-coaching > strong { font-size: 12px; }
+  .gesture-roster { grid-template-columns: repeat(3,1fr); }
+  .lab-combos { flex-direction: column; }
+  .point-target { width: 59px; height: 59px; }
+  .illustrated-fighter, .fighter-warden.illustrated-fighter, .fighter-echo.illustrated-fighter { width: 140px; height: 225px; }
+  .fighters { padding-inline: 4px; gap: 8px; }
+  .combat-hud { grid-template-columns: 1fr 1fr; }
+  .tracking-panel { display: block; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .art-body, .art-core, .art-fragments, .mastery-seal, .point-position.is-verified .point-target { animation: none; }
+  .menu-orbit span:last-child, #app::before, .app-shell::after { animation: none; }
+}
+.analyzer-readings { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.analyzer-fingers .needs-adjustment { border-color: #bb7779; background: #322024; }
+.analyzer-fingers .needs-adjustment b { color: #ffc0b6; }
+.app-shell[data-screen="menu"] .shield-status, .app-shell[data-screen="hero_select"] .shield-status,
+.app-shell[data-screen="leaderboard"] .shield-status { display: none; }
+/* Keep all ten stored records and the exit in view for gesture-only browsing. */
+@media (min-width: 801px) and (max-height: 800px) {
+  .records-screen { padding: 22px 28px; }
+  .records-screen h2 { font-size: 40px; }
+  .records-table { margin-top: 18px; }
+  .records-row { padding: 8px 12px; font-size: 10px; }
+  .records-head { font-size: 9px; }
+  .records-screen .screen-actions { margin-top: 16px; }
+}
+.echo-death-active .art-fragments { animation: echo-shatter 1.2s ease-out both; transform-origin: center; }
+.shield-impact .fighter-player .art-orbit { opacity: .9; animation: shield-impact 420ms ease-out both; transform-origin: center; }
+.story-sigil { position: absolute; z-index: -1; top: 50%; left: 50%; width: min(460px, 75%); aspect-ratio: 1; transform: translate(-50%, -50%); color: #83d8cf; opacity: .18; pointer-events: none; }
+.story-sigil i { position: absolute; inset: 0; border: 1px solid currentColor; border-radius: 50%; }
+.story-sigil i:nth-child(2) { inset: 9%; border-width: 3px; border-style: dashed; }
+.story-sigil i:nth-child(3) { inset: 26%; border-radius: 0; transform: rotate(45deg); }
+.story-sigil b { position: absolute; inset: 0; display: grid; align-content: center; justify-content: center; text-align: center; font-size: 15px; letter-spacing: .4em; line-height: 1.7; }
+.story-warning .story-sigil, .story-corrupt .story-sigil { color: #d18cab; }
+.sequence-story-reveal.story-phase-3 .story-sigil { animation: seal-break 700ms ease-out both; }
+@keyframes seal-break { to { opacity: 0; translate: 0 20px; scale: 1.35; rotate: 20deg; } }
+@media (prefers-reduced-motion: reduce) {
+  .sequence-story-reveal.story-phase-3 .story-sigil, .echo-death-active .art-fragments, .shield-impact .fighter-player .art-orbit { animation: none; }
+}

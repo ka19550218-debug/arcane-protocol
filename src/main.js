@@ -1,4 +1,5 @@
 import './styles.css'
+import './premium.css'
 import { startCamera, stopCamera } from './camera.js'
 import { GESTURES } from './gesture-engine.js'
 import { TwoHandInput } from './two-hand-input.js'
@@ -15,7 +16,7 @@ const app = document.querySelector('#app')
 app.innerHTML = `
   <section class="app-shell" aria-labelledby="app-title">
     <header class="game-header">
-      <div><p class="eyebrow">ADMIT HACKATHON · MOTION 2026</p><h1 id="app-title">ARCANE <span>PROTOCOL</span></h1></div>
+      <div><p class="eyebrow">NEURAL COMBAT SYSTEM // 2057</p><h1 id="app-title">ARCANE <span>PROTOCOL</span></h1></div>
       <p class="state-badge" data-game-state>SYSTEM BOOT</p>
     </header>
     <div class="game-layout">
@@ -28,7 +29,7 @@ app.innerHTML = `
           <video class="camera-feed" autoplay muted playsinline aria-label="Mirrored webcam preview"></video>
           <canvas class="hand-overlay" aria-hidden="true"></canvas>
           <div class="camera-reticle" aria-hidden="true"></div>
-          <span class="camera-corner corner-top" aria-hidden="true">CAM 01 // LIVE</span>
+          <span class="camera-corner corner-top" aria-hidden="true">CAM 01 // SENSOR</span>
           <span class="camera-corner corner-bottom" aria-hidden="true">ARCANE SENSOR ARRAY</span>
           <p class="camera-status" role="status">CONNECTING CAMERA</p>
         </div>
@@ -82,7 +83,7 @@ const twoHandInput = new TwoHandInput()
 const combatGame = new CombatGame()
 const audio = new AudioManager()
 combatGame.onAudio = (cue) => audio.play(cue)
-const SHOW_GESTURE_DEBUG = true // Set false after tuning; no other UI changes needed.
+const SHOW_GESTURE_DEBUG = false // Verbose geometry is opt-in during local tuning.
 
 gestureQualityDebugElement.hidden = !SHOW_GESTURE_DEBUG
 
@@ -99,11 +100,11 @@ const gestureNavigation = new GestureNavigation({
   container: stageFrameElement,
   menu: stageElement,
   debugElement: document.querySelector('.cursor-debug'),
-  onSelect: (selection) => {
+  onSelect: (selection, source) => {
     audio.unlock()
     audio.play('select')
     if (selection.startsWith('SELECT_')) showHeroSync(selection.slice(7))
-    flow.select(selection)
+    flow.select(selection, source)
   },
 })
 
@@ -121,7 +122,9 @@ initializeCamera()
 requestAnimationFrame(updateCombat)
 
 function handleStateChange(state) {
+  combatView?.dispose()
   resultPresentation = null
+  document.querySelector('.app-shell').dataset.screen = state.toLowerCase()
   gestureNavigation.lockUntilPointRelease()
   const hero = getHero(flow.selectedHero)
   document.querySelector('.controls-guide').innerHTML = abilityLegend(hero)
@@ -145,6 +148,7 @@ function handleStateChange(state) {
 }
 
 function updateCombat(now) {
+  gestureNavigation.tick(now)
   flow.update(now)
   if (flow.isCombat && combatView) {
     combatGame.update(now)
@@ -215,7 +219,9 @@ function updateGestureDisplay(landmarks, handedness, timestamp) {
   setPresentationText(currentInputElement, gestureLabel)
   const combatInput = stageElement.querySelector('[data-current-gesture]')
   if (combatInput) setPresentationText(combatInput, `INPUT // ${gestureLabel}`)
-  if (visibleHand?.feedback.state === 'correcting') drawFingerCorrections(visibleHand)
+  for (const hand of Object.values(hands)) {
+    if (hand.feedback.state === 'correcting') drawFingerCorrections(hand)
+  }
 
   const screenChangedByGesture = flow.handleHands(hands, timestamp)
   if (screenChangedByGesture) gestureNavigation.lockUntilPointRelease()
@@ -281,8 +287,9 @@ function updateGestureQuality(feedback, side, rawGesture) {
     for (const name of MAIN_FINGERS) {
       const needsFix = fingerNeedsCorrection(feedback.gesture, name, feedback.fingerStates[name])
       const element = fingerCheckElements[name]
-      setPresentationText(element, `${name} ${needsFix ? 'FIX' : 'OK'}`)
+      setPresentationText(element, `${name} ${feedback.fingerStates[name] === 'PARTIAL' ? 'PARTIAL' : needsFix ? 'ADJUST' : 'OK'}`)
       element.classList.toggle('needs-fix', needsFix)
+      element.classList.toggle('is-partial', feedback.fingerStates[name] === 'PARTIAL')
     }
   }
 }

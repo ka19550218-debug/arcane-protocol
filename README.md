@@ -15,6 +15,8 @@ ARCANE PROTOCOL is a browser-based cyberpunk gesture-controlled game created for
 - Simultaneous two-hand tracking and combination gestures
 - Three playable heroes: VEX, NEX, and AERIS
 - Error Mode with live gesture-quality scoring and corrective feedback
+- Training Center with six gesture modules, three deliberate repetitions, and a five-target POINT navigation exercise
+- Free Practice with both-hand diagnostics, measured quality, corrections, and combination feedback
 - Complete Story Mode with the Warden and ECHO boss fights
 - Boss Rush: choose an operative, fight Warden then ECHO with a short automatic transition
 - Local top-10 leaderboard for completed Story and Boss Rush runs
@@ -86,10 +88,17 @@ The MediaPipe runtime and hand-landmark model are loaded from public CDNs, so th
 - `src/gesture-quality.js` — Error Mode quality scoring and specific correction feedback
 - `src/gesture-navigation.js` — virtual cursor and POINT + dwell selection
 - `src/game-flow.js` and `src/story.js` — calibration, tutorial, Story Mode, results, and retry flow
+- `src/training-session.js` and `src/training-view.js` — gesture practice, repetition verification, and live diagnostics
+- `src/operative-art.js` and `src/premium.css` — original local vector operatives and final presentation
 - `src/leaderboard.js` and `src/audio.js` — local records and centralized sound cues
 - `src/game/` — heroes, bosses, combat rules, settings, and combat UI
 - `test/` — automated gesture, flow, hero, Super, and combat regression tests
 - `docs/` — project requirements, decisions, milestones, and hackathon notes
+
+## Regression checks
+
+Run `node --test test/*.test.js` for the gesture, navigation, Training, story, and combat checks.
+See [the final UI manual checklist](docs/FINAL_UI_QA.md) for physical webcam, gesture-only navigation, sound, and full-run verification. Training mastery lasts for the current session; local score persistence is unchanged.
 
 ## Hackathon development
 

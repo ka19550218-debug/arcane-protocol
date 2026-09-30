@@ -4,6 +4,8 @@ const EMPTY_EVENTS = []
 
 export class CombatView {
   constructor({ root, shield, scoreOffset = 0 }) {
+    this.timers = new Set()
+    this.temporaryNodes = new Set()
     this.root = root
     this.panel = root.querySelector('.combat-panel')
     this.arena = root.querySelector('.arena')
@@ -58,7 +60,7 @@ export class CombatView {
     if (game.boss.id === 'ECHO' && game.state === GAME_STATES.COMBAT && now >= this.nextCorruptionAt) {
       this.showCombatBanner(Math.floor(now / 9000) % 2 ? 'ECHO OVERRIDE' : 'SIGNAL CORRUPTED', 'corruption')
       this.panel.classList.add('echo-glitch')
-      setTimeout(() => this.panel.classList.remove('echo-glitch'), 430)
+      this.schedule(() => this.panel.classList.remove('echo-glitch'), 430)
       this.nextCorruptionAt = now + 8500
     }
 
@@ -193,17 +195,17 @@ export class CombatView {
   playEntrance() {
     this.panel.classList.add('entrance-active')
     if (this.panel.classList.contains('encounter-echo')) this.panel.classList.add('echo-glitch')
-    setTimeout(() => this.panel.classList.remove('entrance-active', 'echo-glitch'), 1650)
+    this.schedule(() => this.panel.classList.remove('entrance-active', 'echo-glitch'), 1650)
   }
 
   showFirstControls() {
-    setTimeout(() => {
+    this.schedule(() => {
       if (!this.arena.isConnected) return
       const reminder = document.createElement('div')
       reminder.className = 'first-combat-controls'
       reminder.innerHTML = '<strong>GESTURE CONTROLS</strong><span>✊ ATTACK</span><span>✋ DEFENSE</span><span>↔ DODGE</span><span>✌ SUPER</span>'
       this.arena.append(reminder)
-      setTimeout(() => reminder.remove(), 1250)
+      this.schedule(() => reminder.remove(), 4500)
     }, 1450)
   }
 
@@ -212,21 +214,21 @@ export class CombatView {
     gain.className = 'score-gain'
     gain.textContent = `+${points.toLocaleString()}`
     this.scoreStatus.append(gain)
-    setTimeout(() => gain.remove(), 900)
+    this.schedule(() => gain.remove(), 900)
   }
 
   playEchoDeath() {
     this.panel.classList.remove('echo-corruption')
     this.panel.classList.add('echo-death-active')
     this.showCombatBanner('ECHO CONNECTION // LOST', 'echo-death', 1200)
-    setTimeout(() => this.showCombatBanner('ARCANE PROTOCOL // CONTROL RESTORED', 'restored', 800), 520)
+    this.schedule(() => this.showCombatBanner('ARCANE PROTOCOL // CONTROL RESTORED', 'restored', 800), 520)
   }
 
   pulseClass(name, duration) {
     this.panel.classList.remove(name)
     void this.panel.offsetWidth
     this.panel.classList.add(name)
-    setTimeout(() => this.panel.classList.remove(name), duration)
+    this.schedule(() => this.panel.classList.remove(name), duration)
   }
 
   showCombatBanner(message, kind, duration = 950) {
@@ -234,15 +236,17 @@ export class CombatView {
     banner.className = `combat-banner banner-${kind}`
     banner.textContent = message
     this.arena.append(banner)
-    setTimeout(() => banner.remove(), duration)
+    this.schedule(() => banner.remove(), duration)
   }
 
   playEffect(name, duration) {
-    if (this.visualTimer) clearTimeout(this.visualTimer)
+    // A later ordinary input cannot cut the one-second Super title short.
+    if (this.panel.dataset.visualEffect?.startsWith('super-') && !name.startsWith('super-')) return
+    if (this.visualTimer) { clearTimeout(this.visualTimer); this.timers.delete(this.visualTimer) }
     this.panel.removeAttribute('data-visual-effect')
     void this.panel.offsetWidth
     this.panel.dataset.visualEffect = name
-    this.visualTimer = setTimeout(() => {
+    this.visualTimer = this.schedule(() => {
       this.panel.removeAttribute('data-visual-effect')
       this.visualTimer = null
     }, duration)
@@ -254,7 +258,7 @@ export class CombatView {
     number.textContent = value
     this.arena.append(number)
     number.addEventListener('animationend', () => number.remove(), { once: true })
-    setTimeout(() => number.remove(), 1000)
+    this.schedule(() => number.remove(), 1000)
   }
 
   finalImpact(game, damage, superAttack) {
@@ -265,9 +269,23 @@ export class CombatView {
     const detail = document.createElement('span')
     detail.textContent = damage ? `−${damage} CORE INTEGRITY` : 'CORE INTEGRITY // ZERO'
     impact.append(title, detail)
+    this.temporaryNodes.add(impact)
     this.root.parentElement.append(impact)
     impact.addEventListener('animationend', () => impact.remove(), { once: true })
-    setTimeout(() => impact.remove(), 900)
+    this.schedule(() => { impact.remove(); this.temporaryNodes.delete(impact) }, 900)
+  }
+
+  schedule(callback, delay) {
+    const timer = setTimeout(() => { this.timers.delete(timer); callback() }, delay)
+    this.timers.add(timer)
+    return timer
+  }
+
+  dispose() {
+    this.timers.forEach((timer) => clearTimeout(timer))
+    this.timers.clear()
+    this.temporaryNodes.forEach((node) => node.remove())
+    this.temporaryNodes.clear()
   }
 
   renderAbilityStates(game, now, superReady, active) {

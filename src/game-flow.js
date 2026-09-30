@@ -1,3 +1,7 @@
+import { TrainingSession, TRAINING_MODULES } from './training-session.js'
+import { TrainingView } from './training-view.js'
+import { gestureArt } from './gesture-art.js'
+import { operativeArt } from './operative-art.js'
 import { GESTURES } from './gesture-engine.js'
 import { createGestureButton } from './gesture-navigation.js'
 import { COMBAT, detectCombo } from './game/combat.js'
@@ -8,6 +12,10 @@ import { readRecords, saveRecord } from './leaderboard.js'
 
 export const APP_STATES = Object.freeze({
   MENU: 'MENU',
+  TRAINING_MENU: 'TRAINING_MENU',
+  TRAINING: 'TRAINING',
+  FREE_PRACTICE: 'FREE_PRACTICE',
+  TRAINING_COMPLETE: 'TRAINING_COMPLETE',
   LEADERBOARD: 'LEADERBOARD',
   RUSH_TRANSITION: 'RUSH_TRANSITION',
   RUSH_RESULT: 'RUSH_RESULT',
@@ -40,12 +48,6 @@ const TUTORIAL_ACTIONS = [
   { id: 'SUPER', gestures: [GESTURES.V_SIGN], icon: '✌', title: 'V SIGN', ability: 'SUPER · OVERDRIVE' },
 ]
 
-const GESTURE_ICONS = Object.freeze({
-  [GESTURES.OPEN_PALM]: '✋',
-  [GESTURES.FIST]: '✊',
-  [GESTURES.POINT]: '☝',
-})
-
 export const FLOW_TIMING = Object.freeze({
   CALIBRATION_HOLD_MS: 550,
   CONFIRMATION_MS: 800,
@@ -77,6 +79,9 @@ const ACTION_STATES = {
 
 export class GameFlow {
   constructor({ stage, stateBadge, onStateChange, soundEnabled = () => true, onToggleSound }) {
+    this.trainingView = new TrainingView(stage)
+    this.masteredGestures = new Set()
+    this.trainingSession = null
     this.stage = stage
     this.stateBadge = stateBadge
     this.onStateChange = onStateChange
@@ -139,7 +144,8 @@ export class GameFlow {
     this.onStateChange?.(nextState)
   }
 
-  select(value) {
+  select(value, source = 'click') {
+    if (this.selectTraining(value, source)) return
     if (![ACTION_STATES[value]].flat().includes(this.state)) return
     switch (value) {
       case 'STORY_MODE':
@@ -207,7 +213,47 @@ export class GameFlow {
     }
   }
 
+  selectTraining(value, source) {
+    const trainingStates = [APP_STATES.TRAINING_MENU, APP_STATES.TRAINING, APP_STATES.FREE_PRACTICE, APP_STATES.TRAINING_COMPLETE]
+    if (value === 'TRAINING' && this.state === APP_STATES.MENU) {
+      this.setState(APP_STATES.TRAINING_MENU)
+      return true
+    }
+    if (!trainingStates.includes(this.state)) return false
+    if (value === 'MAIN_MENU') this.setState(APP_STATES.MENU)
+    else if (value === 'TRAINING_MENU') this.setState(APP_STATES.TRAINING_MENU)
+    else if (value === 'FREE_PRACTICE' && this.state === APP_STATES.TRAINING_MENU) this.setState(APP_STATES.FREE_PRACTICE)
+    else if (value.startsWith('POINT_TARGET_') && this.state === APP_STATES.TRAINING) {
+      if (this.trainingSession.acquireTarget(Number(value.slice(13)), source)) {
+        this.trainingView.targetVerified(this.trainingSession)
+        if (this.trainingSession.complete) this.completeTraining()
+      }
+    } else {
+      let id = value.startsWith('TRAIN_') ? value.slice(6) : null
+      if (this.state === APP_STATES.TRAINING_COMPLETE) {
+        if (value === 'TRAIN_AGAIN') id = this.trainingSession.id
+        if (value === 'TRAIN_NEXT') id = TRAINING_MODULES[(TRAINING_MODULES.findIndex((module) => module.id === this.trainingSession.id) + 1) % TRAINING_MODULES.length].id
+      }
+      if ([APP_STATES.TRAINING_MENU, APP_STATES.TRAINING_COMPLETE].includes(this.state) && TRAINING_MODULES.some((module) => module.id === id)) {
+        this.trainingSession = new TrainingSession(id)
+        this.setState(APP_STATES.TRAINING)
+      }
+    }
+    return true
+  }
+
+  completeTraining() {
+    this.masteredGestures.add(this.trainingSession.id)
+    this.setState(APP_STATES.TRAINING_COMPLETE)
+  }
+
   handleHands(hands, timestamp) {
+    if (this.state === APP_STATES.TRAINING || this.state === APP_STATES.FREE_PRACTICE) {
+      const verified = this.state === APP_STATES.TRAINING && this.trainingSession.update(hands, timestamp)
+      this.trainingView.update(hands, timestamp, verified)
+      if (verified && this.trainingSession.complete) { this.completeTraining(); return true }
+      return false
+    }
     if (this.state === APP_STATES.CALIBRATION) return this.updateCalibration(hands, timestamp)
     if (this.state === APP_STATES.TUTORIAL) return this.updateTutorial(hands, timestamp)
     return false
@@ -427,6 +473,18 @@ export class GameFlow {
     this.stage.innerHTML = ''
 
     switch (this.state) {
+      case APP_STATES.TRAINING_MENU:
+        this.trainingView.renderMenu(this.masteredGestures)
+        break
+      case APP_STATES.TRAINING:
+        this.trainingView.renderSession(this.trainingSession)
+        break
+      case APP_STATES.FREE_PRACTICE:
+        this.trainingView.renderSession(null)
+        break
+      case APP_STATES.TRAINING_COMPLETE:
+        this.trainingView.renderComplete(this.trainingSession)
+        break
       case APP_STATES.MENU:
         this.renderMenu()
         break
@@ -474,19 +532,25 @@ export class GameFlow {
   }
 
   renderMenu() {
+    const modes = [
+      ['STORY_MODE', 'STORY MODE', 'CAMPAIGN PROTOCOL', 'Break the seal. Discover the truth.'],
+      ['BOSS_RUSH', 'BOSS RUSH', 'COMBAT SIMULATION', 'Two hostiles. One operative.'],
+      ['TRAINING', 'TRAINING', 'NEURAL INPUT LAB', 'Master the language of motion.'],
+      ['LEADERBOARD', 'LEADERBOARD', 'ARCANE RECORDS', 'Every operation leaves a signal.'],
+    ]
     this.stage.innerHTML = `
       <section class="story-screen menu-screen" aria-labelledby="menu-title">
-        <div class="menu-orbit" aria-hidden="true"><span></span><span></span></div>
-        <p class="screen-kicker">OPERATOR ACCESS · ONLINE</p>
-        <h2 id="menu-title">ARCANE <span>PROTOCOL</span></h2>
-        <p class="menu-subtitle">TACTICAL COMBAT INTERFACE // SYSTEM 2057</p>
-        <p class="screen-copy">Select a deployment with POINT + dwell.</p>
-        <div class="screen-actions"></div>
+        <div class="menu-world" aria-hidden="true"><div class="menu-orbit"><span></span><span></span></div><div class="menu-operative">${operativeArt('VEX')}</div><div class="menu-floor"></div></div>
+        <div class="menu-identity"><p class="screen-kicker">NEURAL COMBAT INTERFACE // 2057</p><h2 id="menu-title">ARCANE<span>PROTOCOL</span></h2><p class="menu-manifesto">THE SYSTEM IS BROKEN.<br>YOU ARE THE OVERRIDE.</p><div class="menu-system"><span>NETWORK <b class="signal-warning">COMPROMISED</b></span><span>HAND LINK <b>${this.trackingReady ? 'ONLINE' : 'OFFLINE'}</b></span><span>ARCANE CORE <b>STABLE</b></span></div></div>
+        <nav class="mode-panels" aria-label="Game modes">${modes.map(([id], index) => `<div data-mode-slot="${id}" style="--panel-index:${index}"></div>`).join('')}</nav>
+        <footer class="menu-footer"><p class="navigation-hint">☝ POINT TO AIM · HOLD 0.8s TO ENTER<br>RELAX YOUR HAND BETWEEN SELECTIONS</p><div data-sound-action></div></footer>
       </section>`
-    this.appendAction('STORY MODE', 'STORY_MODE')
-    this.appendAction('BOSS RUSH', 'BOSS_RUSH')
-    this.appendAction('LEADERBOARD', 'LEADERBOARD')
-    this.appendAction(`SOUND: ${this.soundEnabled() ? 'ON' : 'OFF'}`, 'SOUND_TOGGLE')
+    modes.forEach(([value, name, category, description], i) => {
+      const button = createGestureButton({ label: `<span class="mode-number">0${i + 1}</span><span class="mode-copy"><small>${category}</small><strong>${name}</strong><em>${description}</em></span><span class="mode-arrow">↗</span>`, value })
+      button.classList.add('mode-panel')
+      this.stage.querySelector(`[data-mode-slot="${value}"]`).append(button)
+    })
+    this.stage.querySelector('[data-sound-action]').append(createGestureButton({ label: `SOUND ${this.soundEnabled() ? 'ON' : 'OFF'}`, value: 'SOUND_TOGGLE' }))
   }
 
   renderLeaderboard() {
@@ -544,6 +608,7 @@ export class GameFlow {
     const dialogue = page.heroInterrupt ? [HERO_INTERRUPTS[this.selectedHero]] : page.dialogue
     this.stage.innerHTML = `
       <section class="story-screen sequence-screen ${intro ? 'intro-screen glitch-subtle' : ''} story-${page.tone ?? 'normal'} ${page.tone === 'corrupt' ? 'glitch-echo' : page.tone === 'warning' ? 'glitch-warning' : ''} story-phase-${this.storyStep} sequence-${this.state.toLowerCase().replaceAll('_', '-')}" aria-labelledby="story-title">
+        ${[APP_STATES.STORY_REVEAL, APP_STATES.RESTORATION].includes(this.state) ? '<div class="story-sigil" aria-hidden="true"><i></i><i></i><i></i><b>ARCANE<br>CORE</b></div>' : ''}
         <div class="story-telemetry" aria-hidden="true"><span>ARCANE // ${String(this.storyStep + 1).padStart(2, '0')}</span><span>SECURE CHANNEL // ${page.tone && page.tone !== 'normal' ? 'COMPROMISED' : 'ACTIVE'}</span></div>
         <p class="screen-kicker">${page.kicker}</p>
         <h2 id="story-title">${page.title === 'ARCANE PROTOCOL' ? 'ARCANE <span>PROTOCOL</span>' : page.title}</h2>
@@ -611,7 +676,7 @@ export class GameFlow {
         <p class="screen-kicker">CALIBRATION · ${this.calibrationStep + 1} / ${CALIBRATION_STEPS.length}</p>
         <h2 id="calibration-title">STEP ${this.calibrationStep + 1}<span> / ${CALIBRATION_STEPS.length}</span></h2>
         <div class="gesture-prompt">
-          <span class="gesture-prompt-icon" aria-hidden="true">${GESTURE_ICONS[step.gesture]}</span>
+          <span class="gesture-prompt-icon" aria-hidden="true">${gestureArt(step.gesture)}</span>
           <strong>${step.title}</strong>
           <span>${step.detail}</span>
         </div>
@@ -630,7 +695,7 @@ export class GameFlow {
         <h2 id="tutorial-title">INPUT <span>CALIBRATION</span></h2>
         <p class="screen-copy">${ECHO_DIALOGUE.training} Use one hand. Release each pose before repeating it. Move sideways quickly to dodge.</p>
         <div class="gesture-prompt tutorial-prompt ${this.tutorialConfirmed ? 'is-verified' : ''}">
-          <span class="gesture-prompt-icon" aria-hidden="true">${action?.icon ?? '✓'}</span>
+          <span class="gesture-prompt-icon" aria-hidden="true">${gestureArt(action?.gestures[0] ?? 'OPEN_PALM')}</span>
           <span class="prompt-overline">${this.tutorialConfirmed ? 'INPUT VERIFIED' : 'WAITING FOR INPUT...'}</span>
           <strong>${action?.title ?? 'TRAINING COMPLETE'}</strong>
           <span>${action?.ability ?? 'Choose your operative next.'}</span>
@@ -650,7 +715,7 @@ export class GameFlow {
     this.stage.innerHTML = `
       <section class="story-screen hero-screen" aria-labelledby="hero-title">
         <p class="screen-kicker">${this.mode === 'BOSS RUSH' ? 'BOSS RUSH // 2 HOSTILES DETECTED' : 'COMBAT AVATAR SELECTION'}</p>
-        <h2 id="hero-title">CHOOSE YOUR <span>OPERATOR</span></h2>
+        <h2 id="hero-title">SELECT YOUR <span>OPERATIVE</span></h2>
         ${this.mode === 'BOSS RUSH' ? '<p class="rush-identity">COMBAT SIMULATION // WARDEN → ECHO</p>' : ''}
         <div class="hero-grid">
           ${Object.values(HEROES).map((hero) => `
@@ -737,6 +802,10 @@ export class GameFlow {
 function badgeFor(state) {
   return {
     [APP_STATES.MENU]: 'MAIN MENU',
+    [APP_STATES.TRAINING_MENU]: 'NEURAL INPUT LAB',
+    [APP_STATES.TRAINING]: 'INPUT TRAINING',
+    [APP_STATES.FREE_PRACTICE]: 'FREE PRACTICE',
+    [APP_STATES.TRAINING_COMPLETE]: 'INPUT VERIFIED',
     [APP_STATES.LEADERBOARD]: 'ARCANE RECORDS',
     [APP_STATES.RUSH_TRANSITION]: 'NEXT TARGET',
     [APP_STATES.RUSH_RESULT]: 'BOSS RUSH RESULT',
@@ -774,8 +843,8 @@ function combatMarkup(hero, boss) {
         <div class="combat-cinematic" aria-hidden="true"><span class="cinematic-kicker">ARCANE PROTOCOL // SUPER CORE</span><strong></strong><span class="cinematic-subtitle"></span></div>
         <div class="boss-intro" aria-hidden="true"><span>${boss.id === 'WARDEN' ? '⚠ THREAT DETECTED' : '⚠ SYSTEM WARNING'}</span><small>${boss.id === 'WARDEN' ? 'CORE SENTINEL' : 'UNAUTHORIZED ENTITY'}</small><strong>${boss.name}</strong><em>${boss.id === 'WARDEN' ? 'COMBAT LINK ACTIVE' : 'SYSTEM COMPROMISED // COMBAT LINK RESTORED'}</em></div>
         <div class="fighters" aria-hidden="true">
-          <div class="fighter fighter-player fighter-${hero.id.toLowerCase()}">${fighterDetailsMarkup()}<span>${hero.id}</span></div>
-          <div class="fighter fighter-boss fighter-${boss.cssClass}">${fighterDetailsMarkup()}<span>${boss.name}</span></div>
+          <div class="fighter fighter-player illustrated-fighter fighter-${hero.id.toLowerCase()}">${operativeArt(hero.id)}<span>${hero.id}</span></div>
+          <div class="fighter fighter-boss illustrated-fighter fighter-${boss.cssClass}">${operativeArt(boss.id)}<span>${boss.name}</span></div>
         </div>
       </div>
       <div class="combat-controls" aria-label="Current operative abilities">
@@ -790,12 +859,5 @@ function combatMarkup(hero, boss) {
 }
 
 function heroVisualMarkup(hero) {
-  return `<div class="hero-visual" aria-hidden="true">
-    <div class="portrait-operative fighter-${hero.id.toLowerCase()}">${fighterDetailsMarkup()}</div>
-    <span class="hero-visual-mark">${hero.id} // SYNCHRONIZE</span>
-  </div>`
-}
-
-function fighterDetailsMarkup() {
-  return `<div class="fighter-aura"></div><div class="fighter-orbit"></div><div class="fighter-shoulder shoulder-left"></div><div class="fighter-shoulder shoulder-right"></div><div class="fighter-arm arm-left"></div><div class="fighter-arm arm-right"></div><div class="fighter-visor"></div><div class="fighter-core"></div><div class="fighter-emblem"></div><div class="fighter-fragments"></div>`
+  return `<div class="hero-visual" aria-hidden="true"><div class="operative-portrait">${operativeArt(hero.id)}</div><span class="hero-visual-mark">${hero.role} // ${hero.id}</span></div>`
 }
