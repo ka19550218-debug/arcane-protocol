@@ -19,6 +19,10 @@ export class CombatView {
     this.superValue = root.querySelector('[data-super-value]')
     this.superBar = root.querySelector('[data-super-bar]')
     this.superProgress = root.querySelector('[data-super-progress]')
+    this.abilityStates = Object.fromEntries(['attack', 'defense', 'dodge', 'super'].map((slot) => [
+      slot,
+      root.querySelector(`[data-ability-slot="${slot}"]`),
+    ]))
     this.shield = shield
     this.scoreOffset = scoreOffset
   }
@@ -38,6 +42,7 @@ export class CombatView {
     this.superBar.style.width = `${game.superEnergy}%`
     this.superProgress.setAttribute('aria-valuenow', String(game.superEnergy))
     const active = game.state === GAME_STATES.COMBAT
+    this.renderAbilityStates(game, now, superReady, active)
     const frozen = active && now < game.frozenUntil
     const seconds = (until) => `${(Math.max(0, until - now) / 1000).toFixed(1)}s`
     const effects = []
@@ -52,22 +57,26 @@ export class CombatView {
     this.warning.hidden = !attack
     if (attack) {
       setText(this.warningTitle, frozen ? `${attack.label} · ${game.freezeLabel}` : attack.label)
-      let instruction = `${hero.dodge} ${attack.direction === 'SWIPE_LEFT' ? 'LEFT' : 'RIGHT'}`
+      let instruction = `↔ ${hero.dodge} ${attack.direction === 'SWIPE_LEFT' ? 'LEFT' : 'RIGHT'}`
       if (attack.type === 'ENERGY_BLAST') {
         instruction = hero.defense.effect === 'freeze'
-          ? 'PALM / 2 PALMS TO PAUSE · ATTACK RESUMES'
+          ? '✋ PALM / 2 PALMS TO PAUSE · ATTACK RESUMES'
           : attack.impactAt - now > hero.defense.durationMs
-            ? 'OPEN PALM AT 2.0s TO BLOCK'
-            : 'OPEN PALM TO BLOCK'
+            ? '✋ OPEN PALM AT 2.0s TO BLOCK'
+            : '✋ OPEN PALM TO BLOCK'
       }
       setText(this.warningInstruction, instruction)
-      setText(this.warningCountdown, `${(Math.max(0, attack.impactAt - now) / 1000).toFixed(1)}s`)
+      const remainingMs = Math.max(0, attack.impactAt - now)
+      setText(this.warningCountdown, `${(remainingMs / 1000).toFixed(1)}s`)
+      this.warning.style.setProperty('--warning-progress', String(remainingMs / attack.warningMs))
+      this.warning.classList.toggle('is-urgent', remainingMs < 750 && !attack.defended)
       this.warning.classList.toggle('is-defended', attack.defended)
     }
 
     const feedbackVisible = now < game.feedback.until || game.state === GAME_STATES.VICTORY || game.state === GAME_STATES.DEFEAT
     setText(this.feedback, feedbackVisible ? game.feedback.message : 'BASIC ATTACKS CHARGE SUPER · RELEASE EACH POSE TO REPEAT')
     this.feedback.dataset.kind = feedbackVisible ? game.feedback.kind : 'neutral'
+    this.root.dataset.combatEffect = feedbackVisible ? game.feedback.kind : 'neutral'
     this.root.classList.toggle('shield-active', game.state === GAME_STATES.COMBAT && now < game.shieldUntil)
     this.root.classList.toggle('full-barrier-active', game.state === GAME_STATES.COMBAT && now < game.fullBarrierUntil)
     this.shield.classList.toggle('shield-active', game.state === GAME_STATES.COMBAT && now < game.shieldUntil)
@@ -82,6 +91,24 @@ export class CombatView {
         ? `${hero.defense.name} ${seconds(game.shieldUntil)}`
         : frozen ? `${game.freezeLabel} ${seconds(game.frozenUntil)}`
           : `${hero.defense.name} ${now < game.nextShieldAt ? `RECHARGING ${seconds(game.nextShieldAt)}` : 'READY'}`)
+  }
+
+  renderAbilityStates(game, now, superReady, active) {
+    const cooldown = (until) => active && now < until ? `COOLDOWN ${(until - now) / 1000 < 10 ? ((until - now) / 1000).toFixed(1) : Math.ceil((until - now) / 1000)}s` : 'READY'
+    const states = {
+      attack: cooldown(game.nextPulseAt),
+      defense: cooldown(game.nextShieldAt),
+      dodge: cooldown(game.nextDodgeAt),
+      super: superReady ? 'SUPER READY' : `SUPER CHARGING · ${game.superEnergy}%`,
+    }
+    for (const [slot, element] of Object.entries(this.abilityStates)) {
+      if (!element) continue
+      const state = states[slot]
+      setText(element.querySelector('[data-ability-state]'), state)
+      element.classList.toggle('is-ready', state === 'READY' || state === 'SUPER READY')
+      element.classList.toggle('is-cooldown', state.startsWith('COOLDOWN'))
+      element.classList.toggle('is-charging', state.startsWith('SUPER CHARGING'))
+    }
   }
 }
 

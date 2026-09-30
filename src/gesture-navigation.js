@@ -114,6 +114,7 @@ export class GestureNavigation {
 
   setProgress(button, progress) {
     button.style.setProperty('--dwell-progress', progress)
+    this.cursor.style.setProperty('--cursor-dwell', progress)
   }
 
   resetDwell() {
@@ -121,6 +122,7 @@ export class GestureNavigation {
       this.activeButton.classList.remove('is-dwelling')
       this.setProgress(this.activeButton, 0)
     }
+    this.cursor.style.setProperty('--cursor-dwell', 0)
     this.activeButton = null
     this.dwellStartedAt = 0
     this.selectionLocked = false

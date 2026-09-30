@@ -29,11 +29,17 @@ const CALIBRATION_STEPS = [
 ]
 
 const TUTORIAL_ACTIONS = [
-  { id: 'PULSE', gestures: [GESTURES.FIST], title: 'FIST', ability: 'PULSE SHOT' },
-  { id: 'SHIELD', gestures: [GESTURES.OPEN_PALM], title: 'OPEN PALM', ability: 'ENERGY SHIELD' },
-  { id: 'DODGE', gestures: [GESTURES.SWIPE_LEFT, GESTURES.SWIPE_RIGHT], title: 'SWIPE LEFT / RIGHT', ability: 'DODGE' },
-  { id: 'SUPER', gestures: [GESTURES.V_SIGN], title: '✌️ V SIGN', ability: 'SUPER · OVERDRIVE' },
+  { id: 'PULSE', gestures: [GESTURES.FIST], icon: '✊', title: 'FIST', ability: 'PULSE SHOT' },
+  { id: 'SHIELD', gestures: [GESTURES.OPEN_PALM], icon: '✋', title: 'OPEN PALM', ability: 'ENERGY SHIELD' },
+  { id: 'DODGE', gestures: [GESTURES.SWIPE_LEFT, GESTURES.SWIPE_RIGHT], icon: '↔', title: 'SWIPE LEFT / RIGHT', ability: 'DODGE' },
+  { id: 'SUPER', gestures: [GESTURES.V_SIGN], icon: '✌', title: 'V SIGN', ability: 'SUPER · OVERDRIVE' },
 ]
+
+const GESTURE_ICONS = Object.freeze({
+  [GESTURES.OPEN_PALM]: '✋',
+  [GESTURES.FIST]: '✊',
+  [GESTURES.POINT]: '☝',
+})
 
 export const FLOW_TIMING = Object.freeze({
   CALIBRATION_HOLD_MS: 550,
@@ -462,6 +468,7 @@ export class GameFlow {
         <p class="screen-kicker">CALIBRATION · ${this.calibrationStep + 1} / ${CALIBRATION_STEPS.length}</p>
         <h2 id="calibration-title">STEP ${this.calibrationStep + 1}<span> / ${CALIBRATION_STEPS.length}</span></h2>
         <div class="gesture-prompt">
+          <span class="gesture-prompt-icon" aria-hidden="true">${GESTURE_ICONS[step.gesture]}</span>
           <strong>${step.title}</strong>
           <span>${step.detail}</span>
         </div>
@@ -476,11 +483,15 @@ export class GameFlow {
     const superStep = action?.id === 'SUPER'
     this.stage.innerHTML = `
       <section class="story-screen tutorial-screen" aria-labelledby="tutorial-title">
-        <p class="screen-kicker">OPERATOR TRAINING · ${this.tutorialComplete.size} / ${TUTORIAL_ACTIONS.length}</p>
-        <h2 id="tutorial-title">COMBAT <span>CONTROLS</span></h2>
+        <p class="screen-kicker">TRAINING // ${action?.id ?? 'COMPLETE'} · ${this.tutorialComplete.size} / ${TUTORIAL_ACTIONS.length}</p>
+        <h2 id="tutorial-title">INPUT <span>CALIBRATION</span></h2>
         <p class="screen-copy">${ECHO_DIALOGUE.training} Use one hand. Release each pose before repeating it. Move sideways quickly to dodge.</p>
-        <div class="gesture-prompt"><strong>${this.tutorialConfirmed ? `${action.title} CONFIRMED` : action ? `SHOW ${action.title}` : 'TRAINING COMPLETE'}</strong>
-          <span>${action?.ability ?? 'Choose your operative next.'}</span></div>
+        <div class="gesture-prompt tutorial-prompt ${this.tutorialConfirmed ? 'is-verified' : ''}">
+          <span class="gesture-prompt-icon" aria-hidden="true">${action?.icon ?? '✓'}</span>
+          <span class="prompt-overline">${this.tutorialConfirmed ? 'INPUT VERIFIED' : 'WAITING FOR INPUT...'}</span>
+          <strong>${action?.title ?? 'TRAINING COMPLETE'}</strong>
+          <span>${action?.ability ?? 'Choose your operative next.'}</span>
+        </div>
         <p class="screen-copy">BASIC ATTACKS CHARGE SUPER · ✊ → +${COMBAT.SUPER_ENERGY_PER_BASIC_ATTACK} ENERGY · ✌️ → SUPER AT 100%</p>
         ${superStep ? `<div class="super-meter is-ready"><div class="stat-label"><span>TRAINING DEMO · SUPER READY ✌️</span><strong>100%</strong></div>
           <div class="health-track super-track"><span style="width:100%"></span></div></div>
@@ -499,8 +510,13 @@ export class GameFlow {
         <h2 id="hero-title">CHOOSE YOUR <span>OPERATOR</span></h2>
         <div class="hero-grid">
           ${Object.values(HEROES).map((hero) => `
-            <article class="hero-card hero-${hero.id.toLowerCase()}">
-              <p>${hero.id}</p><strong>${hero.role}</strong><span>ONLINE · ${hero.description}</span>
+            <article class="hero-card hero-${hero.id.toLowerCase()}" data-hero="${hero.id}">
+              <div class="hero-card-topline"><span>OPERATIVE // ${hero.id}</span><i>ONLINE</i></div>
+              ${heroVisualMarkup(hero)}
+              <div class="hero-card-copy"><p>${hero.id}</p><strong>${hero.role}</strong><span>${hero.description}</span></div>
+              <div class="hero-card-abilities">
+                <span>✊ ${hero.attack.name}</span><span>✋ ${hero.defense.name}</span><span>✌ ${hero.ultimate.name}</span>
+              </div>
               <div data-hero-action="${hero.id}"></div>
             </article>`).join('')}
         </div>
@@ -593,19 +609,36 @@ function badgeFor(state) {
 
 function combatMarkup(hero, boss) {
   return `
-    <section class="combat-panel encounter-${boss.cssClass}" aria-label="Combat arena">
-      <div class="combat-topline"><span>ENCOUNTER ${boss.encounter}</span><span>${hero.id} VS ${boss.name}</span></div>
-      <div class="boss-status"><div class="stat-label"><span>${boss.name}</span><strong data-boss-hp>${boss.hp} / ${boss.hp}</strong></div><div class="health-track boss-track"><span data-boss-bar></span></div></div>
+      <section class="combat-panel encounter-${boss.cssClass}" aria-label="Combat arena">
+      <div class="combat-topline"><span>ENCOUNTER // ${boss.encounter}</span><strong>COMBAT LINK ACTIVE</strong><span>${hero.id} VS ${boss.name}</span></div>
+      <div class="combat-hud">
+        <div class="player-status"><div class="stat-label"><span>${hero.id} · OPERATIVE</span><strong data-player-hp>100 / 100</strong></div><div class="health-track player-track"><span data-player-bar></span></div></div>
+        <div class="score-status"><span>LIVE SCORE</span><strong data-score>0</strong></div>
+        <div class="boss-status"><div class="stat-label"><span>${boss.name}</span><strong data-boss-hp>${boss.hp} / ${boss.hp}</strong></div><div class="health-track boss-track"><span data-boss-bar></span></div></div>
+      </div>
       <div class="arena">
         <div class="arena-grid" aria-hidden="true"></div>
-        <div class="warning-panel" data-warning hidden><span class="warning-eyebrow">WARNING</span><strong data-warning-title>ENERGY BLAST</strong><span data-warning-instruction>OPEN PALM TO BLOCK</span><span class="warning-countdown" data-warning-countdown>1.8s</span></div>
-        <div class="fighters" aria-hidden="true"><div class="fighter fighter-player fighter-${hero.id.toLowerCase()}"><div class="fighter-core"></div><span>${hero.id}</span></div><div class="fighter fighter-boss fighter-${boss.cssClass}"><div class="fighter-core"></div><span>${boss.name}</span></div></div>
+        <div class="warning-panel" data-warning hidden><span class="warning-eyebrow">⚠ INCOMING ATTACK</span><strong data-warning-title>ENERGY BLAST</strong><span class="warning-use">REQUIRED RESPONSE</span><span data-warning-instruction>✋ OPEN PALM TO BLOCK</span><span class="warning-countdown" data-warning-countdown>1.8s</span></div>
+        <div class="combat-fx" aria-hidden="true"><span></span></div>
+        <div class="fighters" aria-hidden="true">
+          <div class="fighter fighter-player fighter-${hero.id.toLowerCase()}"><div class="fighter-aura"></div><div class="fighter-core"></div><div class="fighter-emblem"></div><span>${hero.id}</span></div>
+          <div class="fighter fighter-boss fighter-${boss.cssClass}"><div class="fighter-aura"></div><div class="fighter-core"></div><div class="fighter-emblem"></div><span>${boss.name}</span></div>
+        </div>
       </div>
-      <div class="combat-controls">${abilityLegend(hero).slice(0, 4).map(([gesture, name]) => `<p><span>${gesture}</span><strong>${name}</strong></p>`).join('')}</div>
+      <div class="combat-controls" aria-label="Current operative abilities">
+        ${abilityLegend(hero).slice(0, 4).map(([gesture, name], index) => `<p data-ability-slot="${['attack', 'defense', 'dodge', 'super'][index]}"><span>${gesture}</span><strong>${name}</strong><small data-ability-state>READY</small></p>`).join('')}
+      </div>
       <div class="super-meter" data-super-meter><div class="stat-label"><span data-super-label>SUPER · ${hero.ultimate.name}</span><strong data-super-value>0%</strong></div>
         <div class="health-track super-track" role="progressbar" aria-label="Super Energy" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-super-progress><span data-super-bar style="width:0%"></span></div></div>
       <p class="combat-feedback" data-combat-feedback aria-live="polite">BASIC ATTACKS CHARGE SUPER · RELEASE EACH POSE TO REPEAT</p>
       <p class="combat-status" data-combat-status role="status"></p>
-      <div class="combat-bottomline"><div class="player-status"><div class="stat-label"><span>${hero.id} · HP</span><strong data-player-hp>100 / 100</strong></div><div class="health-track player-track"><span data-player-bar></span></div></div><div class="score-status"><span>SCORE</span><strong data-score>0</strong></div></div>
     </section>`
+}
+
+function heroVisualMarkup(hero) {
+  return `<div class="hero-visual" aria-hidden="true">
+    <span class="hero-visual-ring"></span><span class="hero-visual-head"></span>
+    <span class="hero-visual-body"></span><span class="hero-visual-core"></span>
+    <span class="hero-visual-mark">${hero.id.slice(0, 1)}</span>
+  </div>`
 }

@@ -22,22 +22,27 @@ app.innerHTML = `
         <div class="main-stage" data-stage></div>
       </section>
       <aside class="tracking-panel" aria-label="Gesture controls and camera">
-        <div class="tracking-heading"><span>HAND TRACKING</span><span class="tracking-live">INITIALIZING</span></div>
+        <div class="tracking-heading"><span>OPTICAL HAND LINK</span><span class="tracking-live"><i></i> INITIALIZING</span></div>
         <div class="camera-frame">
           <video class="camera-feed" autoplay muted playsinline aria-label="Mirrored webcam preview"></video>
           <canvas class="hand-overlay" aria-hidden="true"></canvas>
+          <div class="camera-reticle" aria-hidden="true"></div>
           <p class="camera-status" role="status">CONNECTING CAMERA</p>
         </div>
-        <p class="gesture-display" aria-live="polite">LEFT: NONE · RIGHT: NONE</p>
-        <p class="gesture-debug">LEFT RAW: NONE · RIGHT: NONE</p>
+        <div class="tracking-readout"><span>DETECTED INPUT</span><p class="gesture-display" aria-live="polite">LEFT: NONE · RIGHT: NONE</p></div>
         <p class="shield-status" data-shield>SHIELD OFFLINE</p>
         <section class="gesture-quality is-neutral" aria-live="polite" aria-label="Gesture quality feedback">
-          <p class="gesture-quality-title">AWAITING HAND</p>
+          <div class="quality-heading"><span>GESTURE FORM</span><strong class="gesture-quality-title">AWAITING HAND</strong></div>
           <div class="gesture-quality-meter" aria-hidden="true"><span></span></div>
           <p class="gesture-quality-message">Show a gesture to receive guidance</p>
-          <p class="gesture-quality-debug" aria-hidden="true"></p>
         </section>
+        <div class="controls-label">OPERATIVE COMMAND MAP</div>
         <div class="controls-guide">${abilityLegend(getHero()).map(([gesture, name]) => `<p><strong>${gesture}</strong><span>${name}</span></p>`).join('')}</div>
+        <details class="tracking-diagnostics">
+          <summary>DEVELOPER DIAGNOSTICS</summary>
+          <p class="gesture-debug">LEFT RAW: NONE · RIGHT: NONE</p>
+          <p class="gesture-quality-debug" aria-hidden="true"></p>
+        </details>
       </aside>
     </div>
   </section>
@@ -124,13 +129,13 @@ async function initializeCamera() {
     statusElement.textContent = 'CAMERA + TRACKING ONLINE'
     flow.setCameraStatus('online', 'CAMERA ONLINE · TRACKING LOCKED')
     flow.setTrackingReady()
-    document.querySelector('.tracking-live').textContent = 'LIVE'
+    document.querySelector('.tracking-live').innerHTML = '<i></i> LIVE'
   } catch (error) {
     console.error('Camera or hand tracking could not be started.', error)
     statusElement.textContent = `CAMERA ERROR · ${error.message}`
     statusElement.className = 'camera-status is-error'
     flow.setCameraStatus('error', `CAMERA ERROR · ${error.message}`)
-    document.querySelector('.tracking-live').textContent = 'OFFLINE'
+    document.querySelector('.tracking-live').innerHTML = '<i></i> OFFLINE'
   }
 }
 
