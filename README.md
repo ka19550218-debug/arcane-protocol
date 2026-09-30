@@ -104,6 +104,13 @@ See [the final UI manual checklist](docs/FINAL_UI_QA.md) for physical webcam, ge
 
 The main project logic was created during the hackathon. The implementation uses MediaPipe for landmark detection and project-owned JavaScript rules for gesture interpretation, Error Mode feedback, navigation, game flow, and combat.
 
+## Presentation
+
+📊 [Download ARCANE PROTOCOL Presentation](docs/ARCANE_PROTOCOL_Apex.pptx)
+
 ## Live Demo
 
+🎮 https://arcane-protocol.vercel.app
+
+## Live Demo
 https://arcane-protocol.vercel.app
