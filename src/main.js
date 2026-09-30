@@ -23,17 +23,20 @@ app.innerHTML = `
         <div class="main-stage" data-stage></div>
       </section>
       <aside class="tracking-panel" aria-label="Gesture controls and camera">
-        <div class="tracking-heading"><span>OPTICAL HAND LINK</span><span class="tracking-live"><i></i> INITIALIZING</span></div>
+        <div class="tracking-heading"><span>HAND LINK // OPTICAL SENSOR</span><span class="tracking-live"><i></i> INITIALIZING</span></div>
         <div class="camera-frame">
           <video class="camera-feed" autoplay muted playsinline aria-label="Mirrored webcam preview"></video>
           <canvas class="hand-overlay" aria-hidden="true"></canvas>
           <div class="camera-reticle" aria-hidden="true"></div>
+          <span class="camera-corner corner-top" aria-hidden="true">CAM 01 // LIVE</span>
+          <span class="camera-corner corner-bottom" aria-hidden="true">ARCANE SENSOR ARRAY</span>
           <p class="camera-status" role="status">CONNECTING CAMERA</p>
         </div>
         <div class="tracking-readout"><span>DETECTED INPUT</span><p class="gesture-display" aria-live="polite">LEFT: NONE · RIGHT: NONE</p></div>
         <p class="shield-status" data-shield>SHIELD OFFLINE</p>
         <section class="gesture-quality is-neutral" aria-live="polite" aria-label="Gesture quality feedback">
-          <div class="quality-heading"><span>GESTURE FORM</span><strong class="gesture-quality-title">AWAITING HAND</strong></div>
+          <div class="quality-heading"><span>GESTURE ANALYSIS</span><strong class="gesture-quality-score">—</strong></div>
+          <strong class="gesture-quality-title">AWAITING HAND</strong>
           <div class="gesture-quality-meter" aria-hidden="true"><span></span></div>
           <p class="gesture-quality-message">Show a gesture to receive guidance</p>
         </section>
@@ -58,6 +61,7 @@ const gestureDisplayElement = document.querySelector('.gesture-display')
 const gestureDebugElement = document.querySelector('.gesture-debug')
 const gestureQualityElement = document.querySelector('.gesture-quality')
 const gestureQualityTitleElement = document.querySelector('.gesture-quality-title')
+const gestureQualityScoreElement = document.querySelector('.gesture-quality-score')
 const gestureQualityMeterElement = document.querySelector('.gesture-quality-meter > span')
 const gestureQualityMessageElement = document.querySelector('.gesture-quality-message')
 const gestureQualityDebugElement = document.querySelector('.gesture-quality-debug')
@@ -222,6 +226,7 @@ function updateGestureQuality(feedback, side, rawGesture) {
   if (feedback.state === 'neutral') {
     gestureQualityElement.className = 'gesture-quality is-neutral'
     gestureQualityTitleElement.textContent = feedback.fingerStates ? `${side} · NO STATIC GESTURE` : 'AWAITING HAND'
+    gestureQualityScoreElement.textContent = '—'
     gestureQualityMeterElement.style.width = '0%'
     gestureQualityMessageElement.textContent = feedback.fingerStates
       ? 'Show a static gesture to receive guidance'
@@ -231,7 +236,8 @@ function updateGestureQuality(feedback, side, rawGesture) {
 
   gestureQualityElement.className = `gesture-quality is-${feedback.state}`
   const label = feedback.state === 'success' ? formatGesture(feedback.gesture) : `ATTEMPTING ${formatGesture(feedback.gesture)}`
-  gestureQualityTitleElement.textContent = `${side} · ${label} · QUALITY: ${feedback.quality}%`
+  gestureQualityTitleElement.textContent = `${side} // ${feedback.state === 'success' ? 'GESTURE LOCKED · ' : ''}${label}`
+  gestureQualityScoreElement.textContent = `${feedback.quality}%`
   gestureQualityMeterElement.style.width = `${feedback.quality}%`
   gestureQualityMessageElement.textContent = feedback.state === 'success'
     ? 'Gesture recognized'

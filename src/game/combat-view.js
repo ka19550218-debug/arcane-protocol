@@ -3,6 +3,10 @@ import { COMBAT, GAME_STATES } from './combat.js'
 export class CombatView {
   constructor({ root, shield, scoreOffset = 0 }) {
     this.root = root
+    this.panel = root.querySelector('.combat-panel')
+    this.arena = root.querySelector('.arena')
+    this.cinematicTitle = root.querySelector('.combat-cinematic strong')
+    this.cinematicSubtitle = root.querySelector('.cinematic-subtitle')
     this.playerHp = root.querySelector('[data-player-hp]')
     this.playerBar = root.querySelector('[data-player-bar]')
     this.bossHp = root.querySelector('[data-boss-hp]')
@@ -25,14 +29,23 @@ export class CombatView {
     ]))
     this.shield = shield
     this.scoreOffset = scoreOffset
+    this.previousPlayerHp = null
+    this.previousBossHp = null
+    this.previousScore = null
+    this.previousSuperEnergy = null
+    this.previousFeedback = null
+    this.visualTimer = null
   }
 
   render(game, now) {
+    this.renderVisualEvents(game)
     setText(this.playerHp, `${game.playerHp} / ${COMBAT.PLAYER_HP}`)
     this.playerBar.style.width = `${game.playerHp}%`
     setText(this.bossHp, `${game.bossHp} / ${game.boss.hp}`)
     this.bossBar.style.width = `${game.bossHp / game.boss.hp * 100}%`
     setText(this.score, (game.score + this.scoreOffset).toLocaleString())
+    this.panel.classList.toggle('player-critical', game.playerHp > 0 && game.playerHp <= 30)
+    this.panel.classList.toggle('boss-critical', game.bossHp > 0 && game.bossHp / game.boss.hp <= 0.25)
 
     const hero = game.hero
     const superReady = game.superEnergy === COMBAT.SUPER_MAX_ENERGY
@@ -91,6 +104,93 @@ export class CombatView {
         ? `${hero.defense.name} ${seconds(game.shieldUntil)}`
         : frozen ? `${game.freezeLabel} ${seconds(game.frozenUntil)}`
           : `${hero.defense.name} ${now < game.nextShieldAt ? `RECHARGING ${seconds(game.nextShieldAt)}` : 'READY'}`)
+  }
+
+  renderVisualEvents(game) {
+    if (this.previousBossHp !== null && game.bossHp < this.previousBossHp) {
+      this.floatText(`−${this.previousBossHp - game.bossHp}`, 'boss')
+      this.panel.classList.remove('boss-impact')
+      void this.panel.offsetWidth
+      this.panel.classList.add('boss-impact')
+    }
+    if (this.previousPlayerHp !== null && game.playerHp < this.previousPlayerHp) {
+      this.floatText(`−${this.previousPlayerHp - game.playerHp} HP`, 'player')
+      this.playEffect('damage', 360)
+    }
+    if (this.previousScore !== null && game.score !== this.previousScore) {
+      this.score.classList.remove('score-updated')
+      void this.score.offsetWidth
+      this.score.classList.add('score-updated')
+    }
+    if (game.feedback !== this.previousFeedback) {
+      const { kind, message } = game.feedback
+      if (['hit', 'dual-pulse'].includes(kind)) {
+        this.playEffect(message.includes('REFLECTED') ? 'reflect' : kind === 'dual-pulse' ? 'dual-pulse' : `attack-${game.hero.id.toLowerCase()}`, 520)
+      } else if (kind === 'overdrive' || kind === 'hack') {
+        this.cinematicTitle.textContent = game.hero.ultimate.name
+        this.cinematicSubtitle.textContent = game.hero.id === 'NEX' ? 'TARGET COMPROMISED' : game.hero.id === 'AERIS' ? 'TEMPORAL COLLAPSE' : 'MAXIMUM OUTPUT'
+        this.playEffect(`super-${game.hero.id.toLowerCase()}`, 900)
+      } else if (kind === 'victory' && this.previousBossHp !== null && game.bossHp < this.previousBossHp) {
+        const finishingSuper = this.previousSuperEnergy === COMBAT.SUPER_MAX_ENERGY && game.superEnergy === 0
+        if (finishingSuper) {
+          this.cinematicTitle.textContent = game.hero.ultimate.name
+          this.cinematicSubtitle.textContent = game.hero.id === 'NEX' ? 'TARGET COMPROMISED' : game.hero.id === 'AERIS' ? 'TEMPORAL COLLAPSE' : 'MAXIMUM OUTPUT'
+          this.playEffect(`super-${game.hero.id.toLowerCase()}`, 900)
+        } else {
+          this.playEffect(`attack-${game.hero.id.toLowerCase()}`, 520)
+        }
+        this.finalImpact(game, this.previousBossHp - game.bossHp, finishingSuper)
+      } else if (kind === 'shield' && message.includes('BLOCKED')) {
+        this.floatText('BLOCKED', 'player')
+        this.playEffect('block', 480)
+      } else if (kind === 'dodge' && !message.startsWith('DODGED')) {
+        const direction = message.includes('LEFT') || game.attack?.direction === 'SWIPE_LEFT' ? 'left' : 'right'
+        this.playEffect(`dodge-${direction}`, 430)
+      } else if (kind === 'dodge' && message.startsWith('DODGED')) {
+        this.floatText('DODGED', 'player')
+      } else if (kind === 'freeze') {
+        this.playEffect('freeze', 600)
+      }
+      if (message.includes('REFLECTED')) this.floatText('REFLECTED', 'boss')
+      this.previousFeedback = game.feedback
+    }
+    this.previousPlayerHp = game.playerHp
+    this.previousBossHp = game.bossHp
+    this.previousScore = game.score
+    this.previousSuperEnergy = game.superEnergy
+  }
+
+  playEffect(name, duration) {
+    if (this.visualTimer) clearTimeout(this.visualTimer)
+    this.panel.removeAttribute('data-visual-effect')
+    void this.panel.offsetWidth
+    this.panel.dataset.visualEffect = name
+    this.visualTimer = setTimeout(() => {
+      this.panel.removeAttribute('data-visual-effect')
+      this.visualTimer = null
+    }, duration)
+  }
+
+  floatText(value, target) {
+    const number = document.createElement('span')
+    number.className = `floating-combat-text float-${target}`
+    number.textContent = value
+    this.arena.append(number)
+    number.addEventListener('animationend', () => number.remove(), { once: true })
+    setTimeout(() => number.remove(), 1000)
+  }
+
+  finalImpact(game, damage, superAttack) {
+    const impact = document.createElement('div')
+    impact.className = `final-impact ${superAttack ? 'is-super' : ''}`
+    const title = document.createElement('strong')
+    title.textContent = superAttack ? game.hero.ultimate.name : `${game.boss.name} // OFFLINE`
+    const detail = document.createElement('span')
+    detail.textContent = `−${damage} CORE INTEGRITY`
+    impact.append(title, detail)
+    this.root.parentElement.append(impact)
+    impact.addEventListener('animationend', () => impact.remove(), { once: true })
+    setTimeout(() => impact.remove(), 900)
   }
 
   renderAbilityStates(game, now, superReady, active) {

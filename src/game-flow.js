@@ -134,6 +134,7 @@ export class GameFlow {
     this.storyStep = 0
     this.storyStartedAt = now
     this.render()
+    this.stage.classList?.add('state-switch')
     this.onStateChange?.(nextState)
   }
 
@@ -461,13 +462,16 @@ export class GameFlow {
         this.renderResult()
         break
     }
+    this.stage.firstElementChild?.classList.add('scene-enter')
   }
 
   renderMenu() {
     this.stage.innerHTML = `
       <section class="story-screen menu-screen" aria-labelledby="menu-title">
+        <div class="menu-orbit" aria-hidden="true"><span></span><span></span></div>
         <p class="screen-kicker">OPERATOR ACCESS · ONLINE</p>
         <h2 id="menu-title">ARCANE <span>PROTOCOL</span></h2>
+        <p class="menu-subtitle">TACTICAL COMBAT INTERFACE // SYSTEM 2057</p>
         <p class="screen-copy">Select a deployment with POINT + dwell.</p>
         <div class="screen-actions"></div>
       </section>`
@@ -482,10 +486,10 @@ export class GameFlow {
     this.stage.innerHTML = `
       <section class="story-screen records-screen" aria-labelledby="records-title">
         <p class="screen-kicker">LOCAL COMBAT ARCHIVE</p>
-        <h2 id="records-title">ARCANE <span>RECORDS</span></h2>
+        <h2 id="records-title">ARCANE COMBAT <span>ARCHIVE</span></h2>
         ${records.length ? `<div class="records-table" role="table" aria-label="Local leaderboard">
-          <div class="records-row records-head" role="row"><span>#</span><span>OPERATIVE</span><span>MODE</span><span>SCORE</span></div>
-          ${records.map((entry, index) => `<div class="records-row" role="row"><span>${index + 1}</span><span>${entry.hero}</span><span>${entry.mode}</span><strong>${entry.score.toLocaleString()}</strong></div>`).join('')}
+          <div class="records-row records-head" role="row"><span>RANK</span><span>OPERATIVE</span><span>MODE</span><span>SCORE</span></div>
+          ${records.map((entry, index) => `<div class="records-row ${index === 0 ? 'is-top-record' : ''}" role="row"><span>${String(index + 1).padStart(2, '0')}</span><span>${entry.hero}</span><span>${entry.mode}</span><strong>${entry.score.toLocaleString()}</strong></div>`).join('')}
         </div>` : '<p class="screen-copy">NO COMBAT RECORDS FOUND</p>'}
         <div class="screen-actions"></div>
       </section>`
@@ -495,9 +499,10 @@ export class GameFlow {
   renderRushTransition() {
     this.stage.innerHTML = `
       <section class="story-screen rush-screen" aria-labelledby="rush-title">
-        <p class="screen-kicker">BOSS RUSH · TARGET 01 / 02</p>
-        <h2 id="rush-title">TARGET <span>ELIMINATED</span></h2>
+        <p class="screen-kicker">COMBAT SIMULATION · TARGET 01 / 02</p>
+        <h2 id="rush-title">BOSS RUSH <span>// 02</span></h2>
         <div class="success-seal">WARDEN DEFEATED</div>
+        <div class="rush-targets"><span>01 // WARDEN · OFFLINE</span><span>02 // ECHO · INBOUND</span></div>
         <p class="screen-copy">NEXT TARGET: ECHO · HP RESTORED TO 100 · SUPER ENERGY RESET TO 0</p>
       </section>`
   }
@@ -529,7 +534,8 @@ export class GameFlow {
     const speaker = page.heroInterrupt ? this.selectedHero : page.speaker
     const dialogue = page.heroInterrupt ? [HERO_INTERRUPTS[this.selectedHero]] : page.dialogue
     this.stage.innerHTML = `
-      <section class="story-screen sequence-screen ${intro ? 'intro-screen' : ''} story-${page.tone ?? 'normal'}" aria-labelledby="story-title">
+      <section class="story-screen sequence-screen ${intro ? 'intro-screen glitch-subtle' : ''} story-${page.tone ?? 'normal'} ${page.tone === 'corrupt' ? 'glitch-echo' : page.tone === 'warning' ? 'glitch-warning' : ''} story-phase-${this.storyStep} sequence-${this.state.toLowerCase().replaceAll('_', '-')}" aria-labelledby="story-title">
+        <div class="story-telemetry" aria-hidden="true"><span>ARCANE // ${String(this.storyStep + 1).padStart(2, '0')}</span><span>SECURE CHANNEL // ${page.tone && page.tone !== 'normal' ? 'COMPROMISED' : 'ACTIVE'}</span></div>
         <p class="screen-kicker">${page.kicker}</p>
         <h2 id="story-title">${page.title === 'ARCANE PROTOCOL' ? 'ARCANE <span>PROTOCOL</span>' : page.title}</h2>
         ${page.lines ? `<div class="intro-transmission">${page.lines.map((line) => `<p>${line}</p>`).join('')}</div>` : ''}
@@ -634,8 +640,9 @@ export class GameFlow {
   renderHeroSelect() {
     this.stage.innerHTML = `
       <section class="story-screen hero-screen" aria-labelledby="hero-title">
-        <p class="screen-kicker">COMBAT AVATAR SELECTION</p>
+        <p class="screen-kicker">${this.mode === 'BOSS RUSH' ? 'BOSS RUSH // 2 HOSTILES DETECTED' : 'COMBAT AVATAR SELECTION'}</p>
         <h2 id="hero-title">CHOOSE YOUR <span>OPERATOR</span></h2>
+        ${this.mode === 'BOSS RUSH' ? '<p class="rush-identity">COMBAT SIMULATION // WARDEN → ECHO</p>' : ''}
         <div class="hero-grid">
           ${Object.values(HEROES).map((hero) => `
             <article class="hero-card hero-${hero.id.toLowerCase()}" data-hero="${hero.id}">
@@ -664,7 +671,7 @@ export class GameFlow {
       <section class="story-screen briefing-screen" aria-labelledby="briefing-title">
         <p class="screen-kicker">ECHO · SECURE CHANNEL</p>
         <h2 id="briefing-title">MISSION <span>BRIEFING</span></h2>
-        <div class="success-seal" role="status">SELECTED: ${hero.id} · ${hero.role}</div>
+        <div class="success-seal hero-synchronized" role="status">HERO SYNCHRONIZED // ${hero.id} · ${hero.role}</div>
         <div class="echo-message">
           <p><strong>TARGET:</strong> THE WARDEN · <strong>CLASS:</strong> CORE SENTINEL · <strong>STATUS:</strong> HOSTILE</p>
           ${ECHO_DIALOGUE.briefing.map((line) => `<p><strong>ECHO:</strong> ${line}</p>`).join('')}
@@ -684,7 +691,7 @@ export class GameFlow {
         <p class="screen-kicker">${victory ? 'NETWORK CONTROL RESTORED' : final ? 'ECHO CONTROL: 100%' : 'WARDEN · SECURITY LAYER ACTIVE'}</p>
         <h2 id="result-title">${victory ? 'MISSION <span>COMPLETE</span>' : 'CONNECTION <span>LOST</span>'}</h2>
         <div class="result-summary">
-          <strong>${victory ? 'WARDEN: DEFEATED · ECHO: DEFEATED' : 'MISSION FAILED'}</strong>
+          <strong>${victory ? 'WARDEN: DEFEATED · ECHO: DEFEATED' : 'OPERATIVE LINK: TERMINATED'}</strong>
           <p class="result-operative">OPERATIVE <span>${hero.id}</span></p>
           <p>${victory ? 'FINAL SCORE' : 'SCORE'} <span>${Number(this.result?.score ?? 0).toLocaleString()}</span></p>
           ${this.result?.stats ? `<dl class="result-stats">
@@ -742,26 +749,29 @@ function badgeFor(state) {
 function combatMarkup(hero, boss) {
   return `
       <section class="combat-panel encounter-${boss.cssClass}" aria-label="Combat arena">
-      <div class="combat-topline"><span>ENCOUNTER // ${boss.encounter}</span><strong>COMBAT LINK ACTIVE</strong><span>${hero.id} VS ${boss.name}</span></div>
+      <div class="combat-topline"><span>ENCOUNTER // ${boss.encounter}</span><strong>● COMBAT LINK ACTIVE</strong><span>${hero.id} VS ${boss.name}</span></div>
       <div class="combat-hud">
-        <div class="player-status"><div class="stat-label"><span>${hero.id} · OPERATIVE</span><strong data-player-hp>100 / 100</strong></div><div class="health-track player-track"><span data-player-bar></span></div></div>
+        <div class="player-status"><div class="stat-label"><span>OPERATIVE // ${hero.id}</span><strong data-player-hp>100 / 100</strong></div><div class="health-track player-track"><span data-player-bar></span></div><small>VITAL LINK</small></div>
         <div class="score-status"><span>LIVE SCORE</span><strong data-score>0</strong></div>
-        <div class="boss-status"><div class="stat-label"><span>${boss.name}</span><strong data-boss-hp>${boss.hp} / ${boss.hp}</strong></div><div class="health-track boss-track"><span data-boss-bar></span></div></div>
+        <div class="boss-status"><div class="stat-label"><span>${boss.name}</span><strong data-boss-hp>${boss.hp} / ${boss.hp}</strong></div><div class="health-track boss-track"><span data-boss-bar></span></div><small>CORE INTEGRITY</small></div>
       </div>
       <div class="arena">
         <div class="arena-grid" aria-hidden="true"></div>
-        <div class="warning-panel" data-warning hidden><span class="warning-eyebrow">⚠ INCOMING ATTACK</span><strong data-warning-title>ENERGY BLAST</strong><span class="warning-use">REQUIRED RESPONSE</span><span data-warning-instruction>✋ OPEN PALM TO BLOCK</span><span class="warning-countdown" data-warning-countdown>1.8s</span></div>
-        <div class="combat-fx" aria-hidden="true"><span></span></div>
+        <div class="arena-heading" aria-hidden="true"><span>TACTICAL FEED // ${boss.id}</span><span>HOSTILE SIGNAL DETECTED</span></div>
+        <div class="warning-panel" data-warning hidden><span class="warning-eyebrow">⚠ THREAT DETECTED</span><strong data-warning-title>ENERGY BLAST</strong><span class="warning-use">RESPONSE REQUIRED</span><span data-warning-instruction>✋ OPEN PALM TO BLOCK</span><span class="warning-countdown" data-warning-countdown>1.8s</span></div>
+        <div class="combat-fx" aria-hidden="true"><span class="fx-projectile"></span><span class="fx-impact"></span><span class="fx-shield"></span></div>
+        <div class="combat-cinematic" aria-hidden="true"><span class="cinematic-kicker">ARCANE PROTOCOL // SUPER CORE</span><strong></strong><span class="cinematic-subtitle"></span></div>
+        <div class="boss-intro" aria-hidden="true"><span>⚠ HOSTILE DETECTED</span><strong>${boss.id === 'WARDEN' ? 'CORE SENTINEL' : 'UNAUTHORIZED ENTITY'}</strong><small>${boss.name} // MATERIALIZING</small></div>
         <div class="fighters" aria-hidden="true">
-          <div class="fighter fighter-player fighter-${hero.id.toLowerCase()}"><div class="fighter-aura"></div><div class="fighter-core"></div><div class="fighter-emblem"></div><span>${hero.id}</span></div>
-          <div class="fighter fighter-boss fighter-${boss.cssClass}"><div class="fighter-aura"></div><div class="fighter-core"></div><div class="fighter-emblem"></div><span>${boss.name}</span></div>
+          <div class="fighter fighter-player fighter-${hero.id.toLowerCase()}">${fighterDetailsMarkup()}<span>${hero.id}</span></div>
+          <div class="fighter fighter-boss fighter-${boss.cssClass}">${fighterDetailsMarkup()}<span>${boss.name}</span></div>
         </div>
       </div>
       <div class="combat-controls" aria-label="Current operative abilities">
         ${abilityLegend(hero).slice(0, 4).map(([gesture, name], index) => `<p data-ability-slot="${['attack', 'defense', 'dodge', 'super'][index]}"><span>${gesture}</span><strong>${name}</strong><small data-ability-state>READY</small></p>`).join('')}
       </div>
-      <div class="super-meter" data-super-meter><div class="stat-label"><span data-super-label>SUPER · ${hero.ultimate.name}</span><strong data-super-value>0%</strong></div>
-        <div class="health-track super-track" role="progressbar" aria-label="Super Energy" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-super-progress><span data-super-bar style="width:0%"></span></div></div>
+      <div class="super-meter" data-super-meter><div class="stat-label"><span><b>SUPER CORE</b> <em data-super-label>${hero.ultimate.name}</em></span><strong data-super-value>0%</strong></div>
+        <div class="health-track super-track" role="progressbar" aria-label="Super Energy" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-super-progress><span data-super-bar style="width:0%"></span></div><small>✌ V SIGN // ACTIVATE AT 100%</small></div>
       <p class="combat-feedback" data-combat-feedback aria-live="polite">BASIC ATTACKS CHARGE SUPER · RELEASE EACH POSE TO REPEAT</p>
       <p class="combat-status" data-combat-status role="status"></p>
     </section>`
@@ -769,8 +779,11 @@ function combatMarkup(hero, boss) {
 
 function heroVisualMarkup(hero) {
   return `<div class="hero-visual" aria-hidden="true">
-    <span class="hero-visual-ring"></span><span class="hero-visual-head"></span>
-    <span class="hero-visual-body"></span><span class="hero-visual-core"></span>
-    <span class="hero-visual-mark">${hero.id.slice(0, 1)}</span>
+    <div class="portrait-operative fighter-${hero.id.toLowerCase()}">${fighterDetailsMarkup()}</div>
+    <span class="hero-visual-mark">${hero.id} // SYNCHRONIZE</span>
   </div>`
+}
+
+function fighterDetailsMarkup() {
+  return `<div class="fighter-aura"></div><div class="fighter-orbit"></div><div class="fighter-shoulder shoulder-left"></div><div class="fighter-shoulder shoulder-right"></div><div class="fighter-arm arm-left"></div><div class="fighter-arm arm-right"></div><div class="fighter-visor"></div><div class="fighter-core"></div><div class="fighter-emblem"></div><div class="fighter-fragments"></div>`
 }

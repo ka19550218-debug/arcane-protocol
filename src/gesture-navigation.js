@@ -137,6 +137,10 @@ export class GestureNavigation {
 
   activate(button) {
     this.resetDwell()
+    this.cursor.classList.remove('is-activated')
+    void this.cursor.offsetWidth
+    this.cursor.classList.add('is-activated')
+    setTimeout(() => this.cursor.classList.remove('is-activated'), 350)
     this.menu.querySelectorAll('.is-selected').forEach((selectedButton) => {
       selectedButton.classList.remove('is-selected')
     })
