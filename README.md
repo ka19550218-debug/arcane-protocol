@@ -86,3 +86,7 @@ The MediaPipe runtime and hand-landmark model are loaded from public CDNs, so th
 ## Hackathon development
 
 The main project logic was created during the hackathon. The implementation uses MediaPipe for landmark detection and project-owned JavaScript rules for gesture interpretation, Error Mode feedback, navigation, game flow, and combat.
+
+## Live Demo
+
+https://arcane-protocol.vercel.app
