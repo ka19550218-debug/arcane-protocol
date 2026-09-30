@@ -47,7 +47,7 @@ export class GestureNavigation {
 
     this.menu.addEventListener('click', (event) => {
       const button = event.target.closest('[data-navigation-value]')
-      if (button && !button.disabled) this.activate(button)
+      if (button && !button.disabled) this.activate(button, 'click')
     })
   }
 
@@ -79,13 +79,18 @@ export class GestureNavigation {
   updatePoint({ gesture, rawGesture = gesture, quality = 100, indexTip, timestamp, handSide = 'LEFT' }) {
     this.pointActive = isNavigationPoint({ gesture, rawGesture, quality, indexTip })
     if (!this.pointActive) {
-      if (this.lockedUntilPointRelease && gesture !== GESTURES.POINT && rawGesture !== GESTURES.POINT) {
+      if (this.pointLostAt === null) this.pointLostAt = timestamp
+      const handVisible = Number.isFinite(indexTip?.x) && Number.isFinite(indexTip?.y)
+      const lossExpired = timestamp - this.pointLostAt >= POINT_LOST_GRACE_MS
+      // A missing camera sample is not a deliberate POINT release. Keep the
+      // selection lock through brief dropouts just like the visible cursor.
+      if (this.lockedUntilPointRelease && gesture !== GESTURES.POINT && rawGesture !== GESTURES.POINT &&
+        (handVisible || lossExpired)) {
         this.lockedUntilPointRelease = false
         this.resetDwell()
       }
-      if (this.pointLostAt === null) this.pointLostAt = timestamp
       this.lastDwellTimestamp = null
-      if (timestamp - this.pointLostAt >= POINT_LOST_GRACE_MS) {
+      if (lossExpired) {
         this.hideCursor()
         this.updateHeroHover(null)
         this.resetDwell()
@@ -144,8 +149,7 @@ export class GestureNavigation {
     const progress = Math.min(this.dwellElapsed / this.dwellDuration, 1)
     this.setProgress(hoveredButton, progress)
     if (progress === 1) {
-      this.activate(hoveredButton)
-      this.selectionLocked = true
+      this.activate(hoveredButton, 'dwell')
     }
   }
 
@@ -243,7 +247,7 @@ export class GestureNavigation {
     this.updateHeroHover(null)
   }
 
-  activate(button) {
+  activate(button, source = 'dwell') {
     this.resetDwell()
     this.cursor.classList.remove('is-activated')
     void this.cursor.offsetWidth
@@ -253,8 +257,10 @@ export class GestureNavigation {
       selectedButton.classList.remove('is-selected')
     })
     button.classList.add('is-selected')
-    this.lockUntilPointRelease()
-    this.onSelect?.(button.dataset.navigationValue)
+    // Sequential training targets are distinct, disabled after acquisition, and
+    // intentionally allow continuous POINT. All screen choices require release.
+    if (button.dataset.continuousDwell !== 'true' || source !== 'dwell') this.lockUntilPointRelease()
+    this.onSelect?.(button.dataset.navigationValue, source)
   }
 }
 

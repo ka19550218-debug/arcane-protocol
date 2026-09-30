@@ -1,8 +1,8 @@
 // CURSOR TUNING — laptop webcam defaults (30–60 fps).
 // Alpha values are gains at 60 Hz; larger values follow the finger more closely.
-export const CURSOR_ALPHA_MIN = 0.18
-export const CURSOR_ALPHA_MAX = 0.92
-export const CURSOR_DEADZONE = 4 // CSS pixels; radial micro-jitter radius.
+export const CURSOR_ALPHA_MIN = 0.24
+export const CURSOR_ALPHA_MAX = 0.97
+export const CURSOR_DEADZONE = 3 // CSS pixels; radial micro-jitter radius.
 // Normalized camera coordinates AFTER horizontal mirroring.
 export const CURSOR_X_MIN = 0.20
 export const CURSOR_X_MAX = 0.80
@@ -10,10 +10,10 @@ export const CURSOR_Y_MIN = 0.18
 export const CURSOR_Y_MAX = 0.78
 export const POINT_LOST_GRACE_MS = 220
 export const DWELL_MAX_MOVEMENT_SPEED = 650 // CSS pixels / second.
-export const CURSOR_DEBUG = true // Set false to disable cursor diagnostics.
+export const CURSOR_DEBUG = false // Enable locally for raw/mapped/smoothed telemetry.
 const CURSOR_SLOW_SPEED = 35 // CSS pixels / second; precision gain below this.
-const CURSOR_FAST_SPEED = 700 // CSS pixels / second; maximum gain above this.
-const CURSOR_VELOCITY_TAU_MS = 30
+const CURSOR_FAST_SPEED = 480 // CSS pixels / second; maximum gain above this.
+const CURSOR_VELOCITY_TAU_MS = 20
 const CURSOR_RECOVERY_MS = 180
 export const CURSOR_DEBUG_INTERVAL_MS = 100
 
@@ -77,7 +77,8 @@ export class CursorFilter {
     // A continuous radial deadband: tiny motion holds the target; slow intentional
     // motion accumulates and moves it by only the amount outside the deadzone.
     const delta = distance(mapped, this.target)
-    if (delta > CURSOR_DEADZONE) this.target = mix(this.target, mapped, 1 - CURSOR_DEADZONE / delta)
+    const deadzone = CURSOR_DEADZONE * (1 - motion * 0.75)
+    if (delta > deadzone) this.target = mix(this.target, mapped, 1 - deadzone / delta)
     // The deadband must not leave an unreachable strip at the four screen edges.
     if (mapped.x === 0 || mapped.x === bounds.width) this.target.x = mapped.x
     if (mapped.y === 0 || mapped.y === bounds.height) this.target.y = mapped.y

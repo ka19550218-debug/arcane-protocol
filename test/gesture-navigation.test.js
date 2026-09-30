@@ -284,3 +284,28 @@ test('POINT ownership survives brief loss and a later handoff resets dwell and b
   assert.ok(distance(cursorPosition(nav), { x: 780, y: 320 }) < 40)
   assert.deepEqual(selected, [])
 })
+
+test('a brief tracking dropout cannot release the post-selection POINT lock', () => {
+  const target = button({ left: 300, right: 660, top: 250, bottom: 390 })
+  const selected = []
+  const nav = navigation([target], (value) => selected.push(value))
+  for (let frame = 0; frame <= 27; frame += 1) point(nav, 480, 320, frame * 1000 / 30)
+  assert.deepEqual(selected, ['SELECT'])
+
+  nav.update({ gesture: GESTURES.NONE, timestamp: 933 })
+  for (let frame = 0; frame <= 30; frame += 1) point(nav, 480, 320, 966 + frame * 1000 / 30)
+  assert.deepEqual(selected, ['SELECT'], 'a single missing frame must not authorize a second selection')
+  assert.equal(nav.lockedUntilPointRelease, true)
+
+  // A visible relaxed hand is a deliberate release and should unlock immediately.
+  nav.update({ gesture: GESTURES.NONE, indexTip: cameraTip(480, 320), timestamp: 2000 })
+  assert.equal(nav.lockedUntilPointRelease, false)
+  for (let frame = 0; frame <= 27; frame += 1) point(nav, 480, 320, 2033 + frame * 1000 / 30)
+  assert.deepEqual(selected, ['SELECT', 'SELECT'])
+
+  // Taking the hand away for longer than the grace period also permits release.
+  nav.update({ gesture: GESTURES.NONE, timestamp: 3000 })
+  assert.equal(nav.lockedUntilPointRelease, true)
+  nav.update({ gesture: GESTURES.NONE, timestamp: 3000 + POINT_LOST_GRACE_MS })
+  assert.equal(nav.lockedUntilPointRelease, false)
+})
