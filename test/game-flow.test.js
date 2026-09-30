@@ -333,16 +333,14 @@ test('held POINT cannot select a hero and then immediately ENGAGE without releas
     flow.onStateChange = () => navigation.lockUntilPointRelease()
     const input = (gesture, timestamp) => navigation.update({ gesture, timestamp,
       indexTip: { x: 0.5, y: 0.5 }, videoElement: { videoWidth: 640, videoHeight: 480 } })
-    input(GESTURES.POINT, 0)
-    input(GESTURES.POINT, 800)
+    // Dwell requires fresh camera samples; a single 800 ms gap is tracking loss.
+    for (let timestamp = 0; timestamp <= 800; timestamp += 40) input(GESTURES.POINT, timestamp)
     assert.equal(flow.state, APP_STATES.BRIEFING)
     button.dataset.navigationValue = 'BEGIN_MISSION'
-    input(GESTURES.POINT, 3000)
-    input(GESTURES.POINT, 4000)
+    for (let timestamp = 840; timestamp <= 4000; timestamp += 40) input(GESTURES.POINT, timestamp)
     assert.equal(flow.state, APP_STATES.BRIEFING)
     input(GESTURES.NONE, 4100)
-    input(GESTURES.POINT, 4200)
-    input(GESTURES.POINT, 5000)
+    for (let timestamp = 4200; timestamp <= 5000; timestamp += 40) input(GESTURES.POINT, timestamp)
     assert.equal(flow.state, APP_STATES.WARDEN_COMBAT)
   } finally {
     globalThis.document = previousDocument

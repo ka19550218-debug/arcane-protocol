@@ -1,18 +1,10 @@
 import { GESTURES } from './gesture-engine.js'
+import {
+  CursorFilter, CURSOR_DEBUG, CURSOR_DEBUG_INTERVAL_MS,
+  POINT_LOST_GRACE_MS, DWELL_MAX_MOVEMENT_SPEED,
+} from './cursor-filter.js'
 
 const DEFAULT_DWELL_DURATION = 800
-// MediaPipe coordinates are unmirrored; the camera preview is flipped once in CSS.
-const CAMERA_X_MIN = 0.10
-const CAMERA_X_MAX = 0.90
-const CAMERA_Y_MIN = 0.10
-const CAMERA_Y_MAX = 0.90
-const CURSOR_ALPHA_MIN = 0.20
-const CURSOR_ALPHA_MAX = 0.62
-const CURSOR_FAST_DISTANCE = 90
-const CURSOR_DEADZONE_PX = 3
-const CURSOR_REACQUIRE_STEP_PX = 90
-const POINT_LOSS_GRACE_MS = 180
-const DWELL_MOVE_SPEED_PX_PER_SECOND = 650
 const HIT_TOLERANCE_PX = 8
 const HIT_EXIT_TOLERANCE_PX = 12
 export const NAVIGATION_MIN_QUALITY = 65
@@ -27,11 +19,14 @@ export function createGestureButton({ label, value }) {
 }
 
 export class GestureNavigation {
-  constructor({ container, menu, onSelect, dwellDuration = DEFAULT_DWELL_DURATION }) {
+  constructor({ container, menu, onSelect, debugElement, dwellDuration = DEFAULT_DWELL_DURATION }) {
     this.container = container
     this.menu = menu
     this.onSelect = onSelect
     this.dwellDuration = dwellDuration
+    this.debugElement = debugElement
+    if (debugElement) debugElement.hidden = !CURSOR_DEBUG
+    this.lastDebugTimestamp = -Infinity
     this.cursor = document.createElement('div')
     this.cursor.className = 'virtual-cursor'
     this.cursor.setAttribute('aria-hidden', 'true')
@@ -43,11 +38,11 @@ export class GestureNavigation {
     this.lastDwellTimestamp = null
     this.selectionLocked = false
     this.lockedUntilPointRelease = false
-    this.smoothedPosition = null
-    this.acceptedTarget = null
-    this.lastTimestamp = 0
+    this.filter = new CursorFilter()
+    this.cursorHandSide = null
+    this.lastPointTimestamp = null
     this.pointLostAt = null
-    this.reacquiring = false
+    this.pointActive = false
     this.hoveredHeroCard = null
 
     this.menu.addEventListener('click', (event) => {
@@ -56,31 +51,63 @@ export class GestureNavigation {
     })
   }
 
-  update({ gesture, rawGesture = gesture, quality = 100, indexTip, timestamp }) {
-    const pointActive = gesture === GESTURES.POINT && rawGesture === GESTURES.POINT &&
-      quality >= NAVIGATION_MIN_QUALITY && Number.isFinite(indexTip?.x) && Number.isFinite(indexTip?.y)
-    if (!pointActive) {
+  updateHands(hands, timestamp) {
+    const inputFor = (side) => ({
+      gesture: hands[side].gesture,
+      rawGesture: hands[side].debug.rawGesture,
+      quality: hands[side].feedback.quality,
+      indexTip: hands[side].landmarks?.[8],
+      handSide: side,
+      timestamp,
+    })
+    let side = this.cursorHandSide ?? 'LEFT'
+    if (!isNavigationPoint(inputFor(side))) {
+      const other = side === 'LEFT' ? 'RIGHT' : 'LEFT'
+      // A single missing/low-quality frame must not transfer cursor ownership.
+      const canSwitch = this.cursorHandSide === null ||
+        (this.pointLostAt !== null && timestamp - this.pointLostAt >= POINT_LOST_GRACE_MS)
+      if (canSwitch && isNavigationPoint(inputFor(other))) side = other
+    }
+    this.update(inputFor(side))
+  }
+
+  update(input) {
+    this.updatePoint(input)
+    this.renderDebug(input.timestamp)
+  }
+
+  updatePoint({ gesture, rawGesture = gesture, quality = 100, indexTip, timestamp, handSide = 'LEFT' }) {
+    this.pointActive = isNavigationPoint({ gesture, rawGesture, quality, indexTip })
+    if (!this.pointActive) {
       if (this.lockedUntilPointRelease && gesture !== GESTURES.POINT && rawGesture !== GESTURES.POINT) {
         this.lockedUntilPointRelease = false
         this.resetDwell()
       }
       if (this.pointLostAt === null) this.pointLostAt = timestamp
       this.lastDwellTimestamp = null
-      if (timestamp - this.pointLostAt >= POINT_LOSS_GRACE_MS) {
+      if (timestamp - this.pointLostAt >= POINT_LOST_GRACE_MS) {
         this.hideCursor()
         this.updateHeroHover(null)
         this.resetDwell()
-        this.acceptedTarget = null
       }
       return
     }
 
-    const reacquired = this.pointLostAt !== null
-    if (reacquired && timestamp - this.pointLostAt >= POINT_LOSS_GRACE_MS) this.resetDwell()
+    const handChanged = this.cursorHandSide !== null && handSide !== this.cursorHandSide
+    const stale = this.lastPointTimestamp !== null && timestamp - this.lastPointTimestamp > POINT_LOST_GRACE_MS
+    const reacquired = this.pointLostAt !== null || handChanged || stale
+    if (handChanged || stale || (this.pointLostAt !== null && timestamp - this.pointLostAt >= POINT_LOST_GRACE_MS)) {
+      this.resetDwell()
+    }
+    if (reacquired) this.lastDwellTimestamp = null
     this.pointLostAt = null
-    if (reacquired) this.reacquiring = true
-    const target = mapMirroredPoint(indexTip, this.container)
-    const { position, speed } = this.smoothPosition(target, timestamp)
+    this.lastPointTimestamp = timestamp
+    this.cursorHandSide = handSide
+    const bounds = this.getBounds()
+    const { position, speed, recovering } = this.filter.update(indexTip, bounds, timestamp, reacquired)
+    // Read hit geometry before cursor/progress writes, using this exact position.
+    const hoveredButton = this.lockedUntilPointRelease ? null : this.getHoveredButton(position, bounds)
+    this.updateHeroHover(this.lockedUntilPointRelease ? null : position, hoveredButton, bounds)
     this.showCursor(position)
 
     if (this.lockedUntilPointRelease) {
@@ -88,16 +115,21 @@ export class GestureNavigation {
       return
     }
 
-    const hoveredButton = this.getHoveredButton(position)
-    this.updateHeroHover(position, hoveredButton)
     this.cursor.classList.toggle('is-hovering', Boolean(hoveredButton))
     if (!hoveredButton || this.selectionLocked) {
       if (!hoveredButton) this.resetDwell()
       return
     }
 
-    if (speed > DWELL_MOVE_SPEED_PX_PER_SECOND) {
+    if (speed > DWELL_MAX_MOVEMENT_SPEED) {
       this.resetDwell()
+      return
+    }
+    if (recovering) {
+      // Pause a same-target dwell through recovery; never count bridge motion as
+      // an intentional hold or carry progress onto a different target.
+      this.lastDwellTimestamp = null
+      if (hoveredButton !== this.activeButton) this.resetDwell()
       return
     }
 
@@ -117,41 +149,33 @@ export class GestureNavigation {
     }
   }
 
-  smoothPosition(target, timestamp) {
-    if (!this.smoothedPosition) {
-      this.smoothedPosition = target
-      this.acceptedTarget = target
-      this.lastTimestamp = timestamp
-      this.reacquiring = false
-      return { position: target, speed: 0 }
-    }
-
-    const elapsed = Math.max(timestamp - this.lastTimestamp, 1)
-    if (!this.acceptedTarget) this.acceptedTarget = target
-    const rawMovement = Math.hypot(target.x - this.acceptedTarget.x, target.y - this.acceptedTarget.y)
-    if (rawMovement >= CURSOR_DEADZONE_PX) this.acceptedTarget = target
-    const distance = Math.hypot(
-      this.acceptedTarget.x - this.smoothedPosition.x,
-      this.acceptedTarget.y - this.smoothedPosition.y,
-    )
-    const frameAlpha = CURSOR_ALPHA_MIN + (CURSOR_ALPHA_MAX - CURSOR_ALPHA_MIN) *
-      Math.min(distance / CURSOR_FAST_DISTANCE, 1)
-    const alpha = 1 - Math.pow(1 - frameAlpha, Math.min(elapsed, 50) / (1000 / 60))
-    const oldPosition = this.smoothedPosition
-    const step = this.reacquiring ? Math.min(alpha, CURSOR_REACQUIRE_STEP_PX / Math.max(distance, 1)) : alpha
-    this.smoothedPosition = {
-      x: oldPosition.x + (this.acceptedTarget.x - oldPosition.x) * step,
-      y: oldPosition.y + (this.acceptedTarget.y - oldPosition.y) * step,
-    }
-    if (this.reacquiring && distance * (1 - step) <= CURSOR_REACQUIRE_STEP_PX) this.reacquiring = false
-    this.lastTimestamp = timestamp
+  getBounds() {
+    const rect = this.container.getBoundingClientRect()
+    // Absolute cursor transforms originate inside the stage's border.
     return {
-      position: this.smoothedPosition,
-      speed: Math.max(rawMovement, Math.hypot(
-        this.smoothedPosition.x - oldPosition.x,
-        this.smoothedPosition.y - oldPosition.y,
-      )) * 1000 / Math.min(elapsed, 50),
+      left: rect.left + (this.container.clientLeft ?? 0),
+      top: rect.top + (this.container.clientTop ?? 0),
+      width: this.container.clientWidth ?? rect.width,
+      height: this.container.clientHeight ?? rect.height,
     }
+  }
+
+  renderDebug(timestamp) {
+    if (!CURSOR_DEBUG || !this.debugElement || timestamp - this.lastDebugTimestamp < CURSOR_DEBUG_INTERVAL_MS) return
+    this.lastDebugTimestamp = timestamp
+    const pair = (position, digits) => position ? `${position.x.toFixed(digits)}, ${position.y.toFixed(digits)}` : '—'
+    const tracking = this.pointActive ? this.cursorHandSide
+      : this.pointLostAt !== null && timestamp - this.pointLostAt < POINT_LOST_GRACE_MS
+        ? `NONE (HOLD ${this.cursorHandSide ?? '—'})` : 'NONE (LOST)'
+    this.debugElement.textContent = [
+      `POINT HAND: ${tracking}`,
+      `RAW CAMERA: ${pair(this.filter.raw, 3)}`,
+      `MAPPED px: ${pair(this.filter.mapped, 1)}`,
+      `SMOOTHED px: ${pair(this.filter.position, 1)}`,
+      `VELOCITY: ${this.filter.speed.toFixed(0)} px/s · α ${this.filter.alpha.toFixed(2)}`,
+      `DWELL TARGET: ${this.activeButton?.dataset.navigationValue ?? 'NONE'}`,
+      `DWELL: ${Math.round(Math.min(this.dwellElapsed / this.dwellDuration, 1) * 100)}%`,
+    ].join('\n')
   }
 
   showCursor(position) {
@@ -164,10 +188,10 @@ export class GestureNavigation {
     this.cursor.classList.remove('is-hovering')
   }
 
-  updateHeroHover(position, hoveredButton = null) {
+  updateHeroHover(position, hoveredButton = null, bounds) {
     let card = null
     if (position && this.menu.querySelector?.('.hero-screen') && document.elementFromPoint) {
-      const bounds = this.container.getBoundingClientRect()
+      bounds ??= this.getBounds()
       card = hoveredButton?.closest?.('.hero-card') ??
         document.elementFromPoint(bounds.left + position.x, bounds.top + position.y)?.closest('.hero-card')
     }
@@ -177,8 +201,7 @@ export class GestureNavigation {
     this.hoveredHeroCard = card
   }
 
-  getHoveredButton(position) {
-    const containerRect = this.container.getBoundingClientRect()
+  getHoveredButton(position, containerRect = this.getBounds()) {
     const clientX = containerRect.left + position.x
     const clientY = containerRect.top + position.y
     const buttons = [...this.menu.querySelectorAll('[data-navigation-value]')].filter((button) => !button.disabled)
@@ -235,18 +258,11 @@ export class GestureNavigation {
   }
 }
 
-function mapMirroredPoint(point, container) {
-  const bounds = container.getBoundingClientRect()
-  return {
-    x: clamp((1 - point.x - CAMERA_X_MIN) / (CAMERA_X_MAX - CAMERA_X_MIN), 0, 1) * bounds.width,
-    y: clamp((point.y - CAMERA_Y_MIN) / (CAMERA_Y_MAX - CAMERA_Y_MIN), 0, 1) * bounds.height,
-  }
+function isNavigationPoint({ gesture, rawGesture = gesture, quality = 100, indexTip }) {
+  return gesture === GESTURES.POINT && rawGesture === GESTURES.POINT &&
+    quality >= NAVIGATION_MIN_QUALITY && Number.isFinite(indexTip?.x) && Number.isFinite(indexTip?.y)
 }
 
 function distanceToRect(x, y, rect) {
   return Math.hypot(Math.max(rect.left - x, 0, x - rect.right), Math.max(rect.top - y, 0, y - rect.bottom))
-}
-
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max)
 }
