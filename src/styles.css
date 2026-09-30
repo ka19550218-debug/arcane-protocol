@@ -530,6 +530,19 @@ h1 span { color: var(--color-primary); }
 @media (max-width: 950px) and (min-width: 801px) { .game-layout { grid-template-columns: minmax(0, 1fr) 270px; } }
 @media (max-width: 700px) { .combat-hud { grid-template-columns: 1fr 82px 1fr; gap: 8px; } .combat-hud .stat-label { font-size: 10px; } }
 @media (max-width: 560px) { .hero-card { min-height: 350px; } .combat-hud { grid-template-columns: 1fr 1fr; } .combat-hud .score-status { grid-column: 1 / -1; grid-row: 1; } }
+
+/* M11 screens reuse the existing story and result components. */
+.menu-screen .screen-actions { margin-top: 28px; }
+.records-screen { justify-content: start; align-content: center; }
+.records-table { width: min(610px, 100%); max-height: 355px; margin-top: 24px; overflow: auto; border: 1px solid var(--color-border-bright); background: #091827df; text-align: left; }
+.records-row { display: grid; grid-template-columns: 36px 1fr 1.2fr 82px; gap: 8px; padding: 10px 13px; border-bottom: 1px solid #294156; color: var(--color-text); font-size: 12px; }
+.records-row:last-child { border-bottom: 0; }
+.records-row strong { color: var(--color-warning); text-align: right; }
+.records-head { color: var(--color-primary); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.records-head span:last-child { text-align: right; }
+.rush-screen { background: radial-gradient(circle at 50% 45%, #31203855, transparent 70%); }
+.rush-targets { display: grid; gap: 8px; color: var(--color-primary); font-size: 12px; font-weight: 700; text-align: left; }
+@media (max-width: 560px) { .records-row { grid-template-columns: 22px 1fr 1.2fr 60px; gap: 4px; padding: 9px 6px; font-size: 10px; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }

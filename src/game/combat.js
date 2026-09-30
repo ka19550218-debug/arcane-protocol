@@ -172,8 +172,10 @@ export class CombatGame {
 
   pulseShot(now) {
     if (this.useAbility(this.hero.attack, 'nextPulseAt', COMBAT.PULSE_SCORE, 'hit', now)) {
+      const previousEnergy = this.superEnergy
       this.superEnergy = Math.min(COMBAT.SUPER_MAX_ENERGY,
         Math.max(0, this.superEnergy + COMBAT.SUPER_ENERGY_PER_BASIC_ATTACK))
+      if (previousEnergy < COMBAT.SUPER_MAX_ENERGY && this.superEnergy === COMBAT.SUPER_MAX_ENERGY) this.onAudio?.('superReady')
     }
   }
 
@@ -186,6 +188,7 @@ export class CombatGame {
     // Energy replaces the old ultimate timer; both gesture shortcuts share it.
     if (!this.useAbility(this.hero.ultimate, null, COMBAT.OVERDRIVE_SCORE, 'overdrive', now)) return false
     this.superEnergy = 0
+    this.onAudio?.('super')
     return true
   }
 
@@ -196,6 +199,8 @@ export class CombatGame {
       return false
     }
     if (cooldown) this[cooldown] = now + ability.cooldownMs
+    if (kind === 'hit' || kind === 'dual-pulse') this.onAudio?.('attack')
+    if (kind === 'shield') this.onAudio?.('defense')
     if (ability.effect === 'damage') {
       if (ability.freezeMs) {
         this.frozenUntil = Math.max(this.frozenUntil, now + ability.freezeMs)
@@ -240,6 +245,7 @@ export class CombatGame {
     if (now < this.vulnerableUntil) damage = Math.round(damage * this.hero.ultimate.multiplier)
     this.stats.attacks += 1
     this.bossHp = Math.max(0, this.bossHp - damage)
+    this.onAudio?.('bossHit')
     this.score += score
     this.showFeedback(`${label}  −${damage}  +${score}`, kind, now)
     if (this.bossHp === 0) {
@@ -247,6 +253,7 @@ export class CombatGame {
       this.state = GAME_STATES.VICTORY
       this.stop()
       this.showFeedback(`${this.boss.name} DEFEATED  +${COMBAT.VICTORY_SCORE}`, 'victory', now)
+      this.onAudio?.('bossDefeated')
     }
   }
 
@@ -258,6 +265,7 @@ export class CombatGame {
     if (this.state !== GAME_STATES.COMBAT) return
     if (now < this.nextDodgeAt) return
     this.nextDodgeAt = now + COMBAT.DODGE_COOLDOWN_MS
+    this.onAudio?.('dodge')
     if (this.attack?.type !== 'SWEEP' || now >= this.attack.impactAt) {
       this.showFeedback(`${this.hero.dodge} ${gesture === GESTURES.SWIPE_LEFT ? 'LEFT' : 'RIGHT'}`, 'dodge', now)
       return
@@ -295,6 +303,7 @@ export class CombatGame {
       defended: false,
     }
     this.attackCount += 1
+    this.onAudio?.('warning')
   }
 
   resolveAttack(now) {
@@ -324,6 +333,7 @@ export class CombatGame {
 
     const damage = attack.damage
     this.playerHp = Math.max(0, this.playerHp - damage)
+    this.onAudio?.('playerHit')
     this.showFeedback(`HIT  −${damage} HP`, 'damage', now)
     if (this.playerHp === 0) {
       this.state = GAME_STATES.DEFEAT

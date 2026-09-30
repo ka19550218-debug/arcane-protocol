@@ -8,6 +8,7 @@ import { CombatGame, GAME_STATES } from './game/combat.js'
 import { CombatView } from './game/combat-view.js'
 import { getHero, abilityLegend } from './game/heroes.js'
 import { APP_STATES, GameFlow } from './game-flow.js'
+import { AudioManager } from './audio.js'
 
 const app = document.querySelector('#app')
 
@@ -63,6 +64,8 @@ const gestureQualityDebugElement = document.querySelector('.gesture-quality-debu
 const shieldElement = document.querySelector('[data-shield]')
 const twoHandInput = new TwoHandInput()
 const combatGame = new CombatGame()
+const audio = new AudioManager()
+combatGame.onAudio = (cue) => audio.play(cue)
 const SHOW_GESTURE_DEBUG = true // Set false after tuning; no other UI changes needed.
 
 gestureQualityDebugElement.hidden = !SHOW_GESTURE_DEBUG
@@ -75,14 +78,22 @@ let cursorHandSide = 'LEFT'
 const gestureNavigation = new GestureNavigation({
   container: stageFrameElement,
   menu: stageElement,
-  onSelect: (selection) => flow.select(selection),
+  onSelect: (selection) => {
+    audio.unlock()
+    audio.play('select')
+    flow.select(selection)
+  },
 })
 
 const flow = new GameFlow({
   stage: stageElement,
   stateBadge: document.querySelector('[data-game-state]'),
   onStateChange: handleStateChange,
+  soundEnabled: () => audio.enabled,
+  onToggleSound: () => audio.toggle(),
 })
+
+stageFrameElement.addEventListener('pointerdown', () => audio.unlock(), { once: true })
 
 initializeCamera()
 requestAnimationFrame(updateCombat)
@@ -112,6 +123,7 @@ function updateCombat(now) {
     combatGame.update(now)
     combatView.render(combatGame, now)
     if (combatGame.state === GAME_STATES.VICTORY || combatGame.state === GAME_STATES.DEFEAT) {
+      audio.play(combatGame.state === GAME_STATES.VICTORY ? 'victory' : 'defeat')
       flow.showResult(combatGame.state, combatGame.score, combatGame.stats)
     }
   }

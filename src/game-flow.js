@@ -4,8 +4,13 @@ import { COMBAT, detectCombo } from './game/combat.js'
 import { HEROES, getHero, abilityLegend } from './game/heroes.js'
 import { getBoss } from './game/bosses.js'
 import { ECHO_DIALOGUE, HERO_INTERRUPTS, STORY_SEQUENCES } from './story.js'
+import { readRecords, saveRecord } from './leaderboard.js'
 
 export const APP_STATES = Object.freeze({
+  MENU: 'MENU',
+  LEADERBOARD: 'LEADERBOARD',
+  RUSH_TRANSITION: 'RUSH_TRANSITION',
+  RUSH_RESULT: 'RUSH_RESULT',
   INTRO: 'INTRO',
   CAMERA: 'CAMERA',
   CALIBRATION: 'CALIBRATION',
@@ -50,9 +55,14 @@ export const FLOW_TIMING = Object.freeze({
   STORY_WORD_MS: 180,
   STORY_MAX_MS: 6500,
   RESULT_MS: 5000,
+  RUSH_TRANSITION_MS: 1800,
 })
 const MAX_SAMPLE_GAP_MS = 250
 const ACTION_STATES = {
+  STORY_MODE: APP_STATES.MENU,
+  BOSS_RUSH: APP_STATES.MENU,
+  LEADERBOARD: APP_STATES.MENU,
+  SOUND_TOGGLE: APP_STATES.MENU,
   SELECT_VEX: APP_STATES.HERO_SELECT,
   SELECT_NEX: APP_STATES.HERO_SELECT,
   SELECT_AERIS: APP_STATES.HERO_SELECT,
@@ -61,15 +71,20 @@ const ACTION_STATES = {
   ENGAGE_ECHO: APP_STATES.ECHO_BRIEFING,
   RETRY_FINAL: APP_STATES.FINAL_RESULT,
   RETRY_STORY: APP_STATES.ENDING,
-  MAIN_MENU: [APP_STATES.RESULT, APP_STATES.FINAL_RESULT, APP_STATES.ENDING],
+  MAIN_MENU: [APP_STATES.RESULT, APP_STATES.FINAL_RESULT, APP_STATES.ENDING, APP_STATES.RUSH_RESULT, APP_STATES.LEADERBOARD],
+  RETRY_RUSH: APP_STATES.RUSH_RESULT,
 }
 
 export class GameFlow {
-  constructor({ stage, stateBadge, onStateChange }) {
+  constructor({ stage, stateBadge, onStateChange, soundEnabled = () => true, onToggleSound }) {
     this.stage = stage
     this.stateBadge = stateBadge
     this.onStateChange = onStateChange
-    this.state = APP_STATES.INTRO
+    this.state = APP_STATES.CAMERA
+    this.mode = 'STORY'
+    this.recordSaved = false
+    this.soundEnabled = soundEnabled
+    this.onToggleSound = onToggleSound
     this.camera = { state: 'connecting', message: 'CONNECTING CAMERA' }
     this.trackingReady = false
     this.pendingTransition = null
@@ -125,11 +140,31 @@ export class GameFlow {
   select(value) {
     if (![ACTION_STATES[value]].flat().includes(this.state)) return
     switch (value) {
+      case 'STORY_MODE':
+        this.mode = 'STORY'
+        this.recordSaved = false
+        this.setState(APP_STATES.INTRO)
+        break
+      case 'BOSS_RUSH':
+        this.mode = 'BOSS RUSH'
+        this.recordSaved = false
+        this.result = null
+        this.wardenResult = null
+        this.setState(APP_STATES.HERO_SELECT)
+        break
+      case 'LEADERBOARD':
+        this.setState(APP_STATES.LEADERBOARD)
+        break
+      case 'SOUND_TOGGLE':
+        this.onToggleSound?.()
+        this.render()
+        this.onStateChange?.(this.state)
+        break
       case 'SELECT_VEX':
       case 'SELECT_NEX':
       case 'SELECT_AERIS':
         this.selectedHero = value.slice('SELECT_'.length)
-        this.setState(APP_STATES.BRIEFING)
+        this.setState(this.mode === 'BOSS RUSH' ? APP_STATES.WARDEN_COMBAT : APP_STATES.BRIEFING)
         break
       case 'BEGIN_MISSION':
       case 'RETRY':
@@ -151,11 +186,19 @@ export class GameFlow {
         if (this.storyStep !== STORY_SEQUENCES.ENDING.length - 1) return
         this.result = null
         this.wardenResult = null
+        this.recordSaved = false
         this.setState(APP_STATES.HERO_SELECT)
         break
+      case 'RETRY_RUSH':
+        this.result = null
+        this.wardenResult = null
+        this.recordSaved = false
+        this.setState(APP_STATES.WARDEN_COMBAT)
+        break
       case 'MAIN_MENU':
+        this.saveFinishedRun()
         this.resetForMainMenu()
-        this.setState(APP_STATES.INTRO)
+        this.setState(APP_STATES.MENU)
         break
     }
   }
@@ -175,6 +218,12 @@ export class GameFlow {
     if (bossId === 'WARDEN') {
       this.result = encounter
       if (outcome === 'VICTORY') this.wardenResult = encounter
+      if (this.mode === 'BOSS RUSH') {
+        this.setState(outcome === 'VICTORY' ? APP_STATES.RUSH_TRANSITION : APP_STATES.RUSH_RESULT)
+        if (outcome === 'VICTORY') this.scheduleTransition(performance.now(), FLOW_TIMING.RUSH_TRANSITION_MS,
+          (now) => { this.result = null; this.setState(APP_STATES.ECHO_COMBAT, now) })
+        return
+      }
       this.setState(outcome === 'VICTORY' ? APP_STATES.STORY_REVEAL : APP_STATES.RESULT)
       return
     }
@@ -183,7 +232,20 @@ export class GameFlow {
       this.result.stats = Object.fromEntries(Object.keys(stats).map((key) =>
         [key, this.wardenResult.stats[key] + stats[key]]))
     }
-    this.setState(outcome === 'VICTORY' ? APP_STATES.RESTORATION : APP_STATES.FINAL_RESULT)
+    if (this.mode === 'BOSS RUSH') {
+      if (outcome === 'VICTORY') this.saveFinishedRun()
+      this.setState(APP_STATES.RUSH_RESULT)
+    } else {
+      if (outcome === 'VICTORY') this.saveFinishedRun()
+      this.setState(outcome === 'VICTORY' ? APP_STATES.RESTORATION : APP_STATES.FINAL_RESULT)
+    }
+  }
+
+  saveFinishedRun() {
+    if (this.recordSaved || !this.result || !['VICTORY', 'DEFEAT'].includes(this.result.outcome)) return
+    saveRecord({ score: this.result.score, hero: this.selectedHero, mode: this.mode,
+      result: this.result.outcome })
+    this.recordSaved = true
   }
 
   advanceStory(now = performance.now()) {
@@ -198,7 +260,7 @@ export class GameFlow {
       return
     }
     const next = {
-      [APP_STATES.INTRO]: APP_STATES.CAMERA,
+      [APP_STATES.INTRO]: this.calibrationComplete ? APP_STATES.HERO_SELECT : APP_STATES.CAMERA,
       [APP_STATES.STORY_REVEAL]: APP_STATES.ECHO_BRIEFING,
       [APP_STATES.RESTORATION]: APP_STATES.FINAL_RESULT,
     }[this.state]
@@ -326,7 +388,7 @@ export class GameFlow {
     this.renderTutorialConfirmation(action)
     this.scheduleTransition(timestamp, FLOW_TIMING.CONFIRMATION_MS, (now) => {
       this.tutorialConfirmed = null
-      if (this.tutorialComplete.size === TUTORIAL_ACTIONS.length) this.setState(APP_STATES.HERO_SELECT, now)
+      if (this.tutorialComplete.size === TUTORIAL_ACTIONS.length) this.setState(APP_STATES.MENU, now)
       else this.render()
     })
     return true
@@ -341,16 +403,12 @@ export class GameFlow {
 
   resetForMainMenu() {
     this.pendingTransition = null
-    this.calibrationStep = 0
-    this.calibrationComplete = false
-    this.calibrationHoldStartedAt = null
-    this.calibrationHand = null
-    this.lastCalibrationSampleAt = null
-    this.tutorialComplete.clear()
     this.tutorialConfirmed = null
     this.selectedHero = 'VEX'
     this.result = null
     this.wardenResult = null
+    this.mode = 'STORY'
+    this.recordSaved = false
   }
 
   render() {
@@ -360,6 +418,18 @@ export class GameFlow {
     this.stage.innerHTML = ''
 
     switch (this.state) {
+      case APP_STATES.MENU:
+        this.renderMenu()
+        break
+      case APP_STATES.LEADERBOARD:
+        this.renderLeaderboard()
+        break
+      case APP_STATES.RUSH_TRANSITION:
+        this.renderRushTransition()
+        break
+      case APP_STATES.RUSH_RESULT:
+        this.renderRushResult()
+        break
       case APP_STATES.INTRO:
       case APP_STATES.STORY_REVEAL:
       case APP_STATES.ECHO_BRIEFING:
@@ -391,6 +461,64 @@ export class GameFlow {
         this.renderResult()
         break
     }
+  }
+
+  renderMenu() {
+    this.stage.innerHTML = `
+      <section class="story-screen menu-screen" aria-labelledby="menu-title">
+        <p class="screen-kicker">OPERATOR ACCESS · ONLINE</p>
+        <h2 id="menu-title">ARCANE <span>PROTOCOL</span></h2>
+        <p class="screen-copy">Select a deployment with POINT + dwell.</p>
+        <div class="screen-actions"></div>
+      </section>`
+    this.appendAction('STORY MODE', 'STORY_MODE')
+    this.appendAction('BOSS RUSH', 'BOSS_RUSH')
+    this.appendAction('LEADERBOARD', 'LEADERBOARD')
+    this.appendAction(`SOUND: ${this.soundEnabled() ? 'ON' : 'OFF'}`, 'SOUND_TOGGLE')
+  }
+
+  renderLeaderboard() {
+    const records = readRecords()
+    this.stage.innerHTML = `
+      <section class="story-screen records-screen" aria-labelledby="records-title">
+        <p class="screen-kicker">LOCAL COMBAT ARCHIVE</p>
+        <h2 id="records-title">ARCANE <span>RECORDS</span></h2>
+        ${records.length ? `<div class="records-table" role="table" aria-label="Local leaderboard">
+          <div class="records-row records-head" role="row"><span>#</span><span>OPERATIVE</span><span>MODE</span><span>SCORE</span></div>
+          ${records.map((entry, index) => `<div class="records-row" role="row"><span>${index + 1}</span><span>${entry.hero}</span><span>${entry.mode}</span><strong>${entry.score.toLocaleString()}</strong></div>`).join('')}
+        </div>` : '<p class="screen-copy">NO COMBAT RECORDS FOUND</p>'}
+        <div class="screen-actions"></div>
+      </section>`
+    this.appendAction('MAIN MENU', 'MAIN_MENU')
+  }
+
+  renderRushTransition() {
+    this.stage.innerHTML = `
+      <section class="story-screen rush-screen" aria-labelledby="rush-title">
+        <p class="screen-kicker">BOSS RUSH · TARGET 01 / 02</p>
+        <h2 id="rush-title">TARGET <span>ELIMINATED</span></h2>
+        <div class="success-seal">WARDEN DEFEATED</div>
+        <p class="screen-copy">NEXT TARGET: ECHO · HP RESTORED TO 100 · SUPER ENERGY RESET TO 0</p>
+      </section>`
+  }
+
+  renderRushResult() {
+    const victory = this.result?.outcome === 'VICTORY'
+    const wardenDefeated = Boolean(this.wardenResult)
+    this.stage.innerHTML = `
+      <section class="story-screen result-screen rush-screen ${victory ? 'is-victory' : 'is-defeat'}" aria-labelledby="rush-result-title">
+        <p class="screen-kicker">BOSS RUSH · AFTER ACTION REPORT</p>
+        <h2 id="rush-result-title">BOSS RUSH <span>${victory ? 'COMPLETE' : 'FAILED'}</span></h2>
+        <div class="result-summary">
+          <strong>${victory ? 'ALL TARGETS ELIMINATED' : 'COMBAT LINK LOST'}</strong>
+          <p class="result-operative">OPERATIVE <span>${this.selectedHero}</span></p>
+          <div class="rush-targets"><span>WARDEN: ${wardenDefeated ? 'DEFEATED' : 'NOT DEFEATED'}</span><span>ECHO: ${victory ? 'DEFEATED' : wardenDefeated ? 'NOT DEFEATED' : 'NOT REACHED'}</span></div>
+          <p>SCORE <span>${Number(this.result?.score ?? 0).toLocaleString()}</span></p>
+        </div>
+        <div class="screen-actions"></div>
+      </section>`
+    this.appendAction('RETRY', 'RETRY_RUSH')
+    this.appendAction('MAIN MENU', 'MAIN_MENU')
   }
 
   renderStory() {
@@ -590,6 +718,10 @@ export class GameFlow {
 
 function badgeFor(state) {
   return {
+    [APP_STATES.MENU]: 'MAIN MENU',
+    [APP_STATES.LEADERBOARD]: 'ARCANE RECORDS',
+    [APP_STATES.RUSH_TRANSITION]: 'NEXT TARGET',
+    [APP_STATES.RUSH_RESULT]: 'BOSS RUSH RESULT',
     [APP_STATES.INTRO]: 'SYSTEM BOOT',
     [APP_STATES.CAMERA]: 'CAMERA LINK',
     [APP_STATES.CALIBRATION]: 'CALIBRATING',

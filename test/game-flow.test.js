@@ -32,7 +32,6 @@ function hold(flow, gesture, start, side = 'LEFT') {
 function beginCalibration(flow) {
   flow.setCameraStatus('online', 'CAMERA ONLINE')
   flow.setTrackingReady()
-  finishSequence(flow)
   const now = flow.storyStartedAt
   flow.update(now)
   flow.update(now + FLOW_TIMING.CAMERA_ONLINE_MS)
@@ -42,8 +41,6 @@ test('camera readiness is required and CAMERA ONLINE remains visible before cali
   const flow = createFlow()
   flow.select('RETRY')
   flow.select('SELECT_VEX')
-  assert.equal(flow.state, APP_STATES.INTRO)
-  finishSequence(flow)
   assert.equal(flow.state, APP_STATES.CAMERA)
   flow.update(100000)
   assert.equal(flow.state, APP_STATES.CAMERA)
@@ -102,6 +99,7 @@ test('calibration rejects stale output, sample gaps, hand swaps, and interrupted
 
 test('tutorial progresses in order, rejects combos and stale poses, and demonstrates Super', () => {
   const flow = createFlow()
+  flow.calibrationComplete = true
   flow.setState(APP_STATES.TUTORIAL)
   flow.handleHands(hands(GESTURES.FIST, GESTURES.OPEN_PALM), 0)
   flow.handleHands(hands(GESTURES.FIST, GESTURES.FIST), 50)
@@ -117,8 +115,11 @@ test('tutorial progresses in order, rejects combos and stale poses, and demonstr
     assert.equal(flow.state, APP_STATES.TUTORIAL)
     flow.update(flow.pendingTransition.at)
   }
-  assert.equal(flow.state, APP_STATES.HERO_SELECT)
+  assert.equal(flow.state, APP_STATES.MENU)
   flow.update(100000)
+  assert.equal(flow.state, APP_STATES.MENU)
+  flow.select('STORY_MODE')
+  finishSequence(flow)
   assert.equal(flow.state, APP_STATES.HERO_SELECT)
   flow.select('SELECT_VEX')
   assert.equal(flow.state, APP_STATES.BRIEFING)
@@ -239,24 +240,27 @@ for (const heroId of ['VEX', 'NEX', 'AERIS']) {
 test('main menu clears all story progression but preserves the live camera and tracker', () => {
   const flow = createFlow()
   beginCalibration(flow)
+  flow.calibrationComplete = true
   enterWarden(flow, 'NEX')
   flow.showResult('VICTORY', 1200, wardenStats)
   enterEcho(flow)
   flow.showResult('DEFEAT', 300, echoStats)
   flow.select('MAIN_MENU')
-  assert.equal(flow.state, APP_STATES.INTRO)
+  assert.equal(flow.state, APP_STATES.MENU)
   assert.equal(flow.storyStep, 0)
   assert.equal(flow.result, null)
   assert.equal(flow.wardenResult, null)
   assert.equal(flow.selectedHero, 'VEX')
   assert.equal(flow.calibrationStep, 0)
-  assert.equal(flow.tutorialComplete.size, 0)
+  assert.equal(flow.calibrationComplete, true)
   assert.equal(flow.trackingReady, true)
   assert.equal(flow.camera.state, 'online')
 })
 
 test('story pages advance automatically once per update and meaningful choices wait', () => {
   const flow = createFlow()
+  flow.setState(APP_STATES.MENU)
+  flow.select('STORY_MODE')
   const changes = []
   flow.onStateChange = (state) => changes.push(state)
   flow.update(flow.storyStartedAt + FLOW_TIMING.STORY_MIN_MS - 1)

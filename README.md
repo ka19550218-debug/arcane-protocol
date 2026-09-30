@@ -16,8 +16,15 @@ ARCANE PROTOCOL is a browser-based cyberpunk gesture-controlled game created for
 - Three playable heroes: VEX, NEX, and AERIS
 - Error Mode with live gesture-quality scoring and corrective feedback
 - Complete Story Mode with the Warden and ECHO boss fights
+- Boss Rush: choose an operative, fight Warden then ECHO with a short automatic transition
+- Local top-10 leaderboard for completed Story and Boss Rush runs
+- Subtle synthesized sound effects with a gesture-accessible SOUND ON/OFF menu control
 - Hero-specific attacks, defenses, dodges, and Super abilities
 - HP, live score, combat feedback, victory, defeat, and retry flows
+
+The first page load connects the camera and completes calibration and training, then opens the main menu. Returning to the menu keeps the active tracking setup. Boss Rush restores HP to 100 and resets Super Energy to 0 before ECHO. Each encounter uses the existing combat balance and score rules.
+
+Leaderboard records and the sound preference are stored in this browser's `localStorage`. Records contain the actual score, operative, mode, result, and completion time; the highest 10 scores are retained. Sound cues are generated locally with Web Audio and require browser audio permission through a user interaction. The game remains playable if audio is blocked.
 
 ## Supported gestures
 
@@ -79,6 +86,7 @@ The MediaPipe runtime and hand-landmark model are loaded from public CDNs, so th
 - `src/gesture-quality.js` — Error Mode quality scoring and specific correction feedback
 - `src/gesture-navigation.js` — virtual cursor and POINT + dwell selection
 - `src/game-flow.js` and `src/story.js` — calibration, tutorial, Story Mode, results, and retry flow
+- `src/leaderboard.js` and `src/audio.js` — local records and centralized sound cues
 - `src/game/` — heroes, bosses, combat rules, settings, and combat UI
 - `test/` — automated gesture, flow, hero, Super, and combat regression tests
 - `docs/` — project requirements, decisions, milestones, and hackathon notes
