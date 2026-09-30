@@ -18,6 +18,9 @@ export const COMBOS = Object.freeze({
   OVERDRIVE: 'OVERDRIVE',
 })
 
+export const PERFECT_TIMING_MS = 350
+export const PERFECT_SCORE = 100
+
 export function detectCombo(left, right) {
   if (left === GESTURES.FIST && right === GESTURES.FIST) return COMBOS.DUAL_PULSE
   if (left === GESTURES.OPEN_PALM && right === GESTURES.OPEN_PALM) return COMBOS.FULL_BARRIER
@@ -46,6 +49,8 @@ export class CombatGame {
     this.playerHp = COMBAT.PLAYER_HP
     this.bossHp = this.boss.hp
     this.score = 0
+    this.streak = 0
+    this.visualEvents = []
     this.superEnergy = 0
     this.stats = { attacks: 0, blocks: 0, dodges: 0, combos: 0 }
     this.attack = null
@@ -175,7 +180,10 @@ export class CombatGame {
       const previousEnergy = this.superEnergy
       this.superEnergy = Math.min(COMBAT.SUPER_MAX_ENERGY,
         Math.max(0, this.superEnergy + COMBAT.SUPER_ENERGY_PER_BASIC_ATTACK))
-      if (previousEnergy < COMBAT.SUPER_MAX_ENERGY && this.superEnergy === COMBAT.SUPER_MAX_ENERGY) this.onAudio?.('superReady')
+      if (previousEnergy < COMBAT.SUPER_MAX_ENERGY && this.superEnergy === COMBAT.SUPER_MAX_ENERGY) {
+        this.emitVisual('super-ready')
+        this.onAudio?.('superReady')
+      }
     }
   }
 
@@ -199,6 +207,9 @@ export class CombatGame {
       return false
     }
     if (cooldown) this[cooldown] = now + ability.cooldownMs
+    if (kind === 'overdrive') this.emitVisual('super', { heroId: this.hero.id, name: ability.name })
+    else if (kind === 'hit' || kind === 'dual-pulse') this.emitVisual('attack', { heroId: this.hero.id, kind })
+    else if (kind === 'shield') this.emitVisual('shield-ready', { heroId: this.hero.id })
     if (kind === 'hit' || kind === 'dual-pulse') this.onAudio?.('attack')
     if (kind === 'shield') this.onAudio?.('defense')
     if (ability.effect === 'damage') {
@@ -245,10 +256,13 @@ export class CombatGame {
     if (now < this.vulnerableUntil) damage = Math.round(damage * this.hero.ultimate.multiplier)
     this.stats.attacks += 1
     this.bossHp = Math.max(0, this.bossHp - damage)
+    if (kind !== 'reflect') this.increaseStreak()
+    this.emitVisual('boss-hit', { damage, kind })
     this.onAudio?.('bossHit')
     this.score += score
     this.showFeedback(`${label}  −${damage}  +${score}`, kind, now)
     if (this.bossHp === 0) {
+      this.emitVisual('boss-defeated', { bossId: this.boss.id })
       this.score += COMBAT.VICTORY_SCORE
       this.state = GAME_STATES.VICTORY
       this.stop()
@@ -267,11 +281,14 @@ export class CombatGame {
     this.nextDodgeAt = now + COMBAT.DODGE_COOLDOWN_MS
     this.onAudio?.('dodge')
     if (this.attack?.type !== 'SWEEP' || now >= this.attack.impactAt) {
+      this.emitVisual('dodge-move', { direction: gesture === GESTURES.SWIPE_LEFT ? 'left' : 'right', heroId: this.hero.id })
       this.showFeedback(`${this.hero.dodge} ${gesture === GESTURES.SWIPE_LEFT ? 'LEFT' : 'RIGHT'}`, 'dodge', now)
       return
     }
     if (gesture === this.attack.direction) {
       this.attack.defended = true
+      this.attack.perfectDodge = this.attack.impactAt - now <= PERFECT_TIMING_MS
+      this.emitVisual('dodge-move', { direction: gesture === GESTURES.SWIPE_LEFT ? 'left' : 'right', heroId: this.hero.id })
       this.showFeedback(`${this.hero.dodge} LOCKED IN`, 'dodge', now)
     } else {
       this.showFeedback('WRONG DIRECTION — TRY AGAIN', 'danger', now)
@@ -326,13 +343,18 @@ export class CombatGame {
     }
     if (attack.type === 'SWEEP' && attack.defended) {
       this.stats.dodges += 1
-      this.score += COMBAT.DODGE_SCORE
-      this.showFeedback(`DODGED  +${COMBAT.DODGE_SCORE}`, 'dodge', now)
+      const awarded = COMBAT.DODGE_SCORE + (attack.perfectDodge ? PERFECT_SCORE : 0)
+      this.score += awarded
+      this.increaseStreak()
+      this.emitVisual('dodge-success', { perfect: Boolean(attack.perfectDodge) })
+      this.showFeedback(`${attack.perfectDodge ? 'PERFECT DODGE' : 'DODGED'}  +${awarded}`, 'dodge', now)
       return
     }
 
     const damage = attack.damage
     this.playerHp = Math.max(0, this.playerHp - damage)
+    this.streak = 0
+    this.emitVisual('player-hit', { damage })
     this.onAudio?.('playerHit')
     this.showFeedback(`HIT  −${damage} HP`, 'damage', now)
     if (this.playerHp === 0) {
@@ -343,12 +365,27 @@ export class CombatGame {
   }
 
   blockFeedback(ability, attack, startedAt, blockScore, now) {
+    const perfect = attack.impactAt - startedAt <= PERFECT_TIMING_MS
+    if (perfect) this.score += PERFECT_SCORE
+    this.increaseStreak()
     const timed = ability.reflectWindowMs === undefined || attack.impactAt - startedAt <= ability.reflectWindowMs
-    if (ability.reflectDamage && timed) {
-      this.damageBoss(ability.reflectDamage, 0, `${ability.name} REFLECTED`, 'hit', now)
+    const reflected = Boolean(ability.reflectDamage && timed)
+    this.emitVisual('block-success', { perfect, reflected, heroId: this.hero.id })
+    if (reflected) {
+      this.emitVisual('attack', { heroId: this.hero.id, kind: 'reflect' })
+      this.damageBoss(ability.reflectDamage, 0, `${ability.name} REFLECTED`, 'reflect', now)
     } else {
-      this.showFeedback(`${ability.name} BLOCKED  +${blockScore}`, 'shield', now)
+      this.showFeedback(`${perfect ? 'PERFECT BLOCK' : `${ability.name} BLOCKED`}  +${blockScore + (perfect ? PERFECT_SCORE : 0)}`, 'shield', now)
     }
+  }
+
+  increaseStreak() {
+    this.streak += 1
+    if (this.streak >= 2) this.emitVisual('streak', { count: this.streak })
+  }
+
+  emitVisual(type, details = {}) {
+    this.visualEvents.push({ type, ...details })
   }
 
   showFeedback(message, kind, now) {

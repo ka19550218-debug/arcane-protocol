@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { CombatGame, COMBAT, GAME_STATES, detectCombo, COMBOS } from '../src/game/combat.js'
+import { CombatGame, COMBAT, GAME_STATES, detectCombo, COMBOS, PERFECT_SCORE, PERFECT_TIMING_MS } from '../src/game/combat.js'
 import { GESTURES } from '../src/gesture-engine.js'
 
 test('a held fist fires once and requires release plus cooldown to repeat', () => {
@@ -41,6 +41,64 @@ test('shield blocks an energy blast and correct swipe dodges the next sweep', ()
   assert.equal(game.stats.blocks, 1)
   assert.equal(game.stats.dodges, 1)
   assert.match(game.feedback.message, /DODGED/)
+})
+
+test('perfect block and dodge add score only inside the final timing window', () => {
+  const block = new CombatGame()
+  block.start(0)
+  block.update(COMBAT.FIRST_ATTACK_DELAY_MS)
+  block.acceptGesture(GESTURES.OPEN_PALM, block.attack.impactAt - PERFECT_TIMING_MS)
+  block.update(block.attack.impactAt)
+  assert.equal(block.score, COMBAT.BLOCK_SCORE + PERFECT_SCORE)
+  assert.equal(block.playerHp, COMBAT.PLAYER_HP)
+  assert.ok(block.visualEvents.some((event) => event.type === 'block-success' && event.perfect))
+
+  const dodge = new CombatGame()
+  dodge.start(0)
+  dodge.attackCount = 1
+  dodge.beginAttack(1000)
+  dodge.acceptGesture(dodge.attack.direction, dodge.attack.impactAt - PERFECT_TIMING_MS)
+  dodge.update(dodge.attack.impactAt)
+  assert.equal(dodge.score, COMBAT.DODGE_SCORE + PERFECT_SCORE)
+  assert.equal(dodge.playerHp, COMBAT.PLAYER_HP)
+  assert.ok(dodge.visualEvents.some((event) => event.type === 'dodge-success' && event.perfect))
+
+  const early = new CombatGame()
+  early.start(0)
+  early.attackCount = 1
+  early.beginAttack(1000)
+  early.acceptGesture(early.attack.direction, early.attack.impactAt - PERFECT_TIMING_MS - 1)
+  early.update(early.attack.impactAt)
+  assert.equal(early.score, COMBAT.DODGE_SCORE)
+})
+
+test('streak feedback follows successful actions and resets when hit', () => {
+  const game = new CombatGame()
+  game.start(0)
+  game.acceptGesture(GESTURES.FIST, 0)
+  game.acceptGesture(GESTURES.NONE, 100)
+  game.acceptGesture(GESTURES.FIST, 1000)
+  assert.equal(game.streak, 2)
+  assert.ok(game.visualEvents.some((event) => event.type === 'streak' && event.count === 2))
+  game.beginAttack(1100)
+  game.update(game.attack.impactAt)
+  assert.equal(game.streak, 0)
+  assert.equal(game.score, 2 * COMBAT.PULSE_SCORE)
+  game.start(5000)
+  assert.equal(game.streak, 0)
+  assert.deepEqual(game.visualEvents, [])
+})
+
+test('NEX perfect reflection keeps its existing damage and adds only the timing score', () => {
+  const game = new CombatGame('NEX')
+  game.start(0, 'NEX')
+  game.update(COMBAT.FIRST_ATTACK_DELAY_MS)
+  game.acceptGesture(GESTURES.OPEN_PALM, game.attack.impactAt - 300)
+  game.update(game.attack.impactAt)
+  assert.equal(game.score, COMBAT.BLOCK_SCORE + PERFECT_SCORE)
+  assert.equal(game.bossHp, COMBAT.BOSS_HP - game.hero.defense.reflectDamage)
+  assert.equal(game.streak, 1)
+  assert.ok(game.visualEvents.some((event) => event.type === 'block-success' && event.perfect && event.reflected))
 })
 
 test('wrong dodge takes damage, and a swipe cannot re-trigger a held fist', () => {

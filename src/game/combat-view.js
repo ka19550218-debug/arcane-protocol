@@ -1,16 +1,21 @@
 import { COMBAT, GAME_STATES } from './combat.js'
 
+const EMPTY_EVENTS = []
+
 export class CombatView {
   constructor({ root, shield, scoreOffset = 0 }) {
     this.root = root
     this.panel = root.querySelector('.combat-panel')
     this.arena = root.querySelector('.arena')
+    this.arena.style.setProperty('--arena-travel', `${Math.round(this.arena.clientWidth * 0.45)}px`)
     this.cinematicTitle = root.querySelector('.combat-cinematic strong')
     this.cinematicSubtitle = root.querySelector('.cinematic-subtitle')
     this.playerHp = root.querySelector('[data-player-hp]')
     this.playerBar = root.querySelector('[data-player-bar]')
+    this.playerCondition = root.querySelector('[data-player-condition]')
     this.bossHp = root.querySelector('[data-boss-hp]')
     this.bossBar = root.querySelector('[data-boss-bar]')
+    this.bossCondition = root.querySelector('[data-boss-condition]')
     this.score = root.querySelector('[data-score]')
     this.warning = root.querySelector('[data-warning]')
     this.warningTitle = root.querySelector('[data-warning-title]')
@@ -29,12 +34,10 @@ export class CombatView {
     ]))
     this.shield = shield
     this.scoreOffset = scoreOffset
-    this.previousPlayerHp = null
-    this.previousBossHp = null
     this.previousScore = null
-    this.previousSuperEnergy = null
-    this.previousFeedback = null
     this.visualTimer = null
+    this.nextCorruptionAt = performance.now() + 6500
+    this.playEntrance()
   }
 
   render(game, now) {
@@ -46,6 +49,15 @@ export class CombatView {
     setText(this.score, (game.score + this.scoreOffset).toLocaleString())
     this.panel.classList.toggle('player-critical', game.playerHp > 0 && game.playerHp <= 30)
     this.panel.classList.toggle('boss-critical', game.bossHp > 0 && game.bossHp / game.boss.hp <= 0.25)
+    setText(this.playerCondition, game.playerHp > 0 && game.playerHp <= 30 ? 'OPERATIVE CONDITION: CRITICAL' : 'VITAL LINK')
+    setText(this.bossCondition, game.bossHp > 0 && game.bossHp / game.boss.hp <= 0.25 ? 'CORE INTEGRITY CRITICAL' : 'CORE INTEGRITY')
+    this.panel.classList.toggle('echo-corruption', game.boss.id === 'ECHO' && game.state === GAME_STATES.COMBAT)
+    if (game.boss.id === 'ECHO' && game.state === GAME_STATES.COMBAT && now >= this.nextCorruptionAt) {
+      this.showCombatBanner(Math.floor(now / 9000) % 2 ? 'ECHO OVERRIDE' : 'SIGNAL CORRUPTED', 'corruption')
+      this.panel.classList.add('echo-glitch')
+      setTimeout(() => this.panel.classList.remove('echo-glitch'), 430)
+      this.nextCorruptionAt = now + 8500
+    }
 
     const hero = game.hero
     const superReady = game.superEnergy === COMBAT.SUPER_MAX_ENERGY
@@ -107,57 +119,87 @@ export class CombatView {
   }
 
   renderVisualEvents(game) {
-    if (this.previousBossHp !== null && game.bossHp < this.previousBossHp) {
-      this.floatText(`−${this.previousBossHp - game.bossHp}`, 'boss')
-      this.panel.classList.remove('boss-impact')
-      void this.panel.offsetWidth
-      this.panel.classList.add('boss-impact')
-    }
-    if (this.previousPlayerHp !== null && game.playerHp < this.previousPlayerHp) {
-      this.floatText(`−${this.previousPlayerHp - game.playerHp} HP`, 'player')
+    const events = game.visualEvents.length ? game.visualEvents.splice(0) : EMPTY_EVENTS
+    const mainEffect = events.find((event) => event.type === 'super')
+      ?? events.find((event) => event.type === 'attack')
+      ?? events.find((event) => event.type === 'dodge-move')
+      ?? events.find((event) => event.type === 'player-hit')
+      ?? events.find((event) => event.type === 'shield-ready')
+    if (mainEffect?.type === 'super') {
+      this.cinematicTitle.textContent = mainEffect.name
+      this.cinematicSubtitle.textContent = mainEffect.heroId === 'NEX' ? 'SYSTEM ACCESS // TARGET COMPROMISED'
+        : mainEffect.heroId === 'AERIS' ? 'TEMPORAL FRACTURE // IMPACT' : 'MAXIMUM OUTPUT // CORE DISCHARGE'
+      this.playEffect(`super-${mainEffect.heroId.toLowerCase()}`, 1000)
+    } else if (mainEffect?.type === 'attack') {
+      this.playEffect(mainEffect.kind === 'reflect' ? 'reflect' : mainEffect.kind === 'dual-pulse'
+        ? 'dual-pulse' : `attack-${mainEffect.heroId.toLowerCase()}`, 470)
+    } else if (mainEffect?.type === 'dodge-move') {
+      this.playEffect(`dodge-${mainEffect.direction}`, 430)
+    } else if (mainEffect?.type === 'player-hit') {
       this.playEffect('damage', 360)
+    } else if (mainEffect?.type === 'shield-ready') {
+      this.playEffect(game.hero.id === 'AERIS' ? 'freeze' : 'shield-ready', 500)
+    }
+
+    for (const event of events) {
+      if (event.type === 'boss-hit') {
+        this.floatText(`−${event.damage}`, 'boss', event.kind === 'overdrive' ? 'large' : '')
+        this.panel.classList.remove('boss-impact')
+        void this.panel.offsetWidth
+        this.panel.classList.add('boss-impact')
+      } else if (event.type === 'player-hit') {
+        this.floatText(`−${event.damage} HP`, 'player')
+      } else if (event.type === 'block-success') {
+        this.pulseClass('shield-impact', 500)
+        this.floatText(event.perfect ? 'PERFECT BLOCK' : event.reflected ? 'REFLECTED' : 'BLOCKED', 'player')
+        if (event.perfect) this.showCombatBanner('PERFECT BLOCK  +100', 'perfect')
+        if (event.reflected) this.floatText('REFLECTED', 'boss')
+      } else if (event.type === 'dodge-success') {
+        this.floatText(event.perfect ? 'PERFECT DODGE' : 'DODGED', 'player')
+        if (event.perfect) this.showCombatBanner('PERFECT DODGE  +100', 'perfect')
+      } else if (event.type === 'streak') {
+        this.showCombatBanner(`COMBO x${event.count}`, 'combo')
+      } else if (event.type === 'super-ready') {
+        this.showCombatBanner('SUPER CORE // READY  ✌ V SIGN', 'ready')
+        this.pulseClass('super-charged', 1100)
+      } else if (event.type === 'boss-defeated' && event.bossId === 'WARDEN') {
+        this.finalImpact(game, 0, false)
+      }
     }
     if (this.previousScore !== null && game.score !== this.previousScore) {
       this.score.classList.remove('score-updated')
       void this.score.offsetWidth
       this.score.classList.add('score-updated')
     }
-    if (game.feedback !== this.previousFeedback) {
-      const { kind, message } = game.feedback
-      if (['hit', 'dual-pulse'].includes(kind)) {
-        this.playEffect(message.includes('REFLECTED') ? 'reflect' : kind === 'dual-pulse' ? 'dual-pulse' : `attack-${game.hero.id.toLowerCase()}`, 520)
-      } else if (kind === 'overdrive' || kind === 'hack') {
-        this.cinematicTitle.textContent = game.hero.ultimate.name
-        this.cinematicSubtitle.textContent = game.hero.id === 'NEX' ? 'TARGET COMPROMISED' : game.hero.id === 'AERIS' ? 'TEMPORAL COLLAPSE' : 'MAXIMUM OUTPUT'
-        this.playEffect(`super-${game.hero.id.toLowerCase()}`, 900)
-      } else if (kind === 'victory' && this.previousBossHp !== null && game.bossHp < this.previousBossHp) {
-        const finishingSuper = this.previousSuperEnergy === COMBAT.SUPER_MAX_ENERGY && game.superEnergy === 0
-        if (finishingSuper) {
-          this.cinematicTitle.textContent = game.hero.ultimate.name
-          this.cinematicSubtitle.textContent = game.hero.id === 'NEX' ? 'TARGET COMPROMISED' : game.hero.id === 'AERIS' ? 'TEMPORAL COLLAPSE' : 'MAXIMUM OUTPUT'
-          this.playEffect(`super-${game.hero.id.toLowerCase()}`, 900)
-        } else {
-          this.playEffect(`attack-${game.hero.id.toLowerCase()}`, 520)
-        }
-        this.finalImpact(game, this.previousBossHp - game.bossHp, finishingSuper)
-      } else if (kind === 'shield' && message.includes('BLOCKED')) {
-        this.floatText('BLOCKED', 'player')
-        this.playEffect('block', 480)
-      } else if (kind === 'dodge' && !message.startsWith('DODGED')) {
-        const direction = message.includes('LEFT') || game.attack?.direction === 'SWIPE_LEFT' ? 'left' : 'right'
-        this.playEffect(`dodge-${direction}`, 430)
-      } else if (kind === 'dodge' && message.startsWith('DODGED')) {
-        this.floatText('DODGED', 'player')
-      } else if (kind === 'freeze') {
-        this.playEffect('freeze', 600)
-      }
-      if (message.includes('REFLECTED')) this.floatText('REFLECTED', 'boss')
-      this.previousFeedback = game.feedback
-    }
-    this.previousPlayerHp = game.playerHp
-    this.previousBossHp = game.bossHp
     this.previousScore = game.score
-    this.previousSuperEnergy = game.superEnergy
+  }
+
+  playEntrance() {
+    this.panel.classList.add('entrance-active')
+    if (this.panel.classList.contains('encounter-echo')) this.panel.classList.add('echo-glitch')
+    setTimeout(() => this.panel.classList.remove('entrance-active', 'echo-glitch'), 1650)
+  }
+
+  playEchoDeath() {
+    this.panel.classList.remove('echo-corruption')
+    this.panel.classList.add('echo-death-active')
+    this.showCombatBanner('ECHO CONNECTION // LOST', 'echo-death', 1200)
+    setTimeout(() => this.showCombatBanner('ARCANE PROTOCOL // CONTROL RESTORED', 'restored', 800), 520)
+  }
+
+  pulseClass(name, duration) {
+    this.panel.classList.remove(name)
+    void this.panel.offsetWidth
+    this.panel.classList.add(name)
+    setTimeout(() => this.panel.classList.remove(name), duration)
+  }
+
+  showCombatBanner(message, kind, duration = 950) {
+    const banner = document.createElement('div')
+    banner.className = `combat-banner banner-${kind}`
+    banner.textContent = message
+    this.arena.append(banner)
+    setTimeout(() => banner.remove(), duration)
   }
 
   playEffect(name, duration) {
@@ -171,9 +213,9 @@ export class CombatView {
     }, duration)
   }
 
-  floatText(value, target) {
+  floatText(value, target, size = '') {
     const number = document.createElement('span')
-    number.className = `floating-combat-text float-${target}`
+    number.className = `floating-combat-text float-${target} ${size}`
     number.textContent = value
     this.arena.append(number)
     number.addEventListener('animationend', () => number.remove(), { once: true })
@@ -186,7 +228,7 @@ export class CombatView {
     const title = document.createElement('strong')
     title.textContent = superAttack ? game.hero.ultimate.name : `${game.boss.name} // OFFLINE`
     const detail = document.createElement('span')
-    detail.textContent = `−${damage} CORE INTEGRITY`
+    detail.textContent = damage ? `−${damage} CORE INTEGRITY` : 'CORE INTEGRITY // ZERO'
     impact.append(title, detail)
     this.root.parentElement.append(impact)
     impact.addEventListener('animationend', () => impact.remove(), { once: true })

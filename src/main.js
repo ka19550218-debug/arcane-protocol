@@ -77,6 +77,7 @@ gestureQualityDebugElement.hidden = !SHOW_GESTURE_DEBUG
 let cameraStream
 let stopHandTracking
 let combatView = null
+let resultPresentation = null
 let cursorHandSide = 'LEFT'
 
 const gestureNavigation = new GestureNavigation({
@@ -103,6 +104,7 @@ initializeCamera()
 requestAnimationFrame(updateCombat)
 
 function handleStateChange(state) {
+  resultPresentation = null
   gestureNavigation.lockUntilPointRelease()
   const hero = getHero(flow.selectedHero)
   document.querySelector('.controls-guide').innerHTML = abilityLegend(hero)
@@ -127,8 +129,14 @@ function updateCombat(now) {
     combatGame.update(now)
     combatView.render(combatGame, now)
     if (combatGame.state === GAME_STATES.VICTORY || combatGame.state === GAME_STATES.DEFEAT) {
-      audio.play(combatGame.state === GAME_STATES.VICTORY ? 'victory' : 'defeat')
-      flow.showResult(combatGame.state, combatGame.score, combatGame.stats)
+      if (!resultPresentation) {
+        const echoVictory = combatGame.state === GAME_STATES.VICTORY && flow.bossId === 'ECHO'
+        const delay = echoVictory ? 1350 : combatGame.state === GAME_STATES.VICTORY ? 760 : 0
+        resultPresentation = { at: now + delay }
+        audio.play(combatGame.state === GAME_STATES.VICTORY ? 'victory' : 'defeat')
+        if (echoVictory) combatView.playEchoDeath()
+      }
+      if (now >= resultPresentation.at) flow.showResult(combatGame.state, combatGame.score, combatGame.stats)
     }
   }
   requestAnimationFrame(updateCombat)

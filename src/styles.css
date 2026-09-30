@@ -771,10 +771,10 @@ h1 span { color: var(--color-primary); }
 @keyframes fighter-idle { 50% { translate: 0 -4px; } }
 @keyframes core-breathe { 50% { opacity: .65; box-shadow: 0 0 15px currentColor; } }
 @keyframes low-integrity { to { opacity: .5; } }
-@keyframes fx-shot { 0% { opacity: 0; transform: translateX(0) scale(.5); } 20% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateX(330px) scale(1.2); } }
-@keyframes fx-emp { 0% { opacity: 0; transform: translateX(0) scale(.4); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateX(330px) scale(5); } }
-@keyframes fx-chrono { 0% { opacity: 0; transform: translateX(0) rotate(0); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateX(330px) rotate(360deg) scale(2.4); } }
-@keyframes fx-reflect { 0% { opacity: 0; transform: translateX(0); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateX(-330px); } }
+@keyframes fx-shot { 0% { opacity: 0; transform: translateX(0) scale(.5); } 20% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateX(var(--arena-travel)) scale(1.2); } }
+@keyframes fx-emp { 0% { opacity: 0; transform: translateX(0) scale(.4); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateX(var(--arena-travel)) scale(5); } }
+@keyframes fx-chrono { 0% { opacity: 0; transform: translateX(0) rotate(0); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateX(var(--arena-travel)) rotate(360deg) scale(2.4); } }
+@keyframes fx-reflect { 0% { opacity: 0; transform: translateX(0); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateX(calc(-1 * var(--arena-travel))); } }
 @keyframes fx-impact { 0%, 40% { opacity: 0; transform: scale(.2); } 60% { opacity: 1; } 100% { opacity: 0; transform: scale(5); } }
 @keyframes shield-ripple { from { opacity: .95; scale: .5; } to { opacity: 0; scale: 1.4; } }
 @keyframes temporal-pause { 40% { opacity: .8; filter: hue-rotate(75deg); } }
@@ -831,4 +831,127 @@ h1 span { color: var(--color-primary); }
 @media (prefers-reduced-motion: reduce) {
   .boss-intro { display: none; }
   [data-visual-effect^="super-"] .combat-cinematic { opacity: 1; }
+}
+
+/* Final combat presentation. Each effect runs only for its combat event. */
+.fighter-boss { animation: fighter-idle 3.2s ease-in-out infinite; }
+.boss-intro, .encounter-echo .boss-intro {
+  inset: 0; z-index: 8; height: auto; gap: 8px;
+  background: radial-gradient(circle at 72% 52%, #693b334d, #03070deb 67%);
+  animation: entrance-veil 1.6s cubic-bezier(.2,.75,.25,1) both;
+}
+.encounter-echo .boss-intro {
+  background: repeating-linear-gradient(0deg, #130c1bea 0 5px, #271130e9 5px 6px);
+}
+.boss-intro span { color: #ffb0a1; font-size: clamp(13px, 1.5vw, 20px); animation: entrance-warning 1.5s ease-out both; }
+.boss-intro small { color: #f4cfb3; font-size: clamp(11px, 1.2vw, 16px); animation: entrance-subtitle 1.5s ease-out both; }
+.boss-intro strong { font-size: clamp(36px, 6vw, 78px); line-height: 1; text-shadow: 0 0 24px currentColor; animation: entrance-name 1.5s cubic-bezier(.2,.8,.2,1) both; }
+.boss-intro em { margin-top: 12px; color: #9cf4db; font-size: clamp(10px, 1.15vw, 15px); font-style: normal; font-weight: 800; letter-spacing: .2em; animation: entrance-link 1.55s ease-out both; }
+.encounter-echo .boss-intro span, .encounter-echo .boss-intro strong { color: #e5b6ff; }
+.encounter-echo .boss-intro strong { animation: entrance-name 1.5s steps(8, end) both; }
+.encounter-echo .boss-intro em { color: #f5a6dd; }
+.entrance-active .fighter-boss { animation: entrance-figure 1.6s ease-out both; }
+.encounter-echo.entrance-active .fighter-boss { animation: echo-entrance-figure 1.6s steps(9, end) both; }
+.entrance-active .fighter-boss .fighter-core { animation: entrance-core 1.6s ease-out both; }
+.echo-glitch .combat-hud { animation: hud-glitch 430ms steps(3, end) both; }
+
+.combat-banner {
+  position: absolute; top: 17%; left: 50%; z-index: 9; width: max-content; max-width: 90%;
+  padding: 9px 15px; border: 1px solid currentColor; background: #071521e8;
+  color: #bfffee; font-size: clamp(13px, 1.5vw, 20px); font-weight: 900;
+  letter-spacing: .15em; text-align: center; pointer-events: none;
+  animation: combat-banner 900ms cubic-bezier(.18,.8,.28,1) both;
+}
+.banner-combo { top: 71%; color: #ffda83; }
+.banner-perfect { top: 18%; color: #fff3a5; }
+.banner-ready { top: 19%; color: #c1ffdc; font-size: clamp(17px, 2.1vw, 27px); }
+.banner-corruption { top: 10%; left: auto; right: 8px; color: #e6acff; font-size: 10px; animation-duration: 900ms; }
+.banner-echo-death { top: 28%; color: #efc0ff; font-size: clamp(20px, 3vw, 38px); }
+.banner-restored { top: 47%; color: #aeffe7; font-size: clamp(15px, 2vw, 25px); }
+.floating-combat-text.large { font-size: clamp(29px, 4vw, 52px); }
+.super-charged .super-meter { animation: super-core-arrives 1s ease-out both; }
+.super-charged .super-track { animation: super-core-ring 1s ease-out both; }
+.shield-impact .fx-shield { opacity: 1; animation: shield-ripple 470ms ease-out both; }
+.shield-impact .fighter-player .fighter-aura { animation: shield-impact 420ms ease-out both; }
+.combat-panel:has(.fighter-nex).shield-impact .fx-shield { border-radius: 4px; border-style: dashed; color: #a0f6b7; }
+.combat-panel:has(.fighter-aeris).shield-impact .fx-shield { border-style: double; color: #c9a8ff; }
+.player-critical .player-status { animation: critical-edge 1.4s ease-in-out infinite alternate; }
+.boss-critical .boss-status small { color: #ff9b85; font-weight: 900; }
+.boss-critical .fighter-warden::after { box-shadow: inset 12px 0 #ff693644, inset -6px 0 #05060a; }
+.boss-critical .fighter-echo .fighter-fragments { animation-duration: 1.2s; }
+.echo-corruption .arena::before { border-color: #dcb1ff22; background: repeating-linear-gradient(0deg, transparent 0 12px, #c194e80c 12px 13px); }
+.echo-corruption .arena-heading span:last-child { color: #dca8f2; }
+.echo-glitch .fighter-echo { animation: hud-glitch 430ms steps(3, end) both; }
+.echo-death-active .fighter-echo { animation: echo-disconnect 1.2s steps(8, end) both; }
+.echo-death-active .fighter-echo .fighter-fragments { animation: echo-shatter 1.2s ease-out both; }
+.echo-death-active .arena { background: radial-gradient(circle at 70% 45%, #a373b353, #0b0914 62%); }
+.result-screen.is-victory h2 { animation: victory-reveal 850ms cubic-bezier(.16,.8,.28,1) both; }
+.result-targets { display: flex; justify-content: space-between; gap: 10px; color: #a6fce7; font-size: 11px; font-weight: 800; letter-spacing: .14em; }
+.new-record { padding: 8px; border: 1px solid #ffdb87; color: #ffdb87; font-size: 15px; font-weight: 900; letter-spacing: .2em; animation: record-reveal 780ms ease-out both; }
+
+[data-visual-effect^="attack-"] .arena { animation: impact-shake 260ms ease-out 170ms both; }
+[data-visual-effect^="attack-"] .fighter-player .fighter-core { animation: attack-charge 420ms ease-out both; }
+[data-visual-effect="attack-vex"] .fx-projectile::after,
+[data-visual-effect="super-vex"] .combat-cinematic::after {
+  position: absolute; top: 50%; right: 0; width: 95px; height: 5px;
+  background: linear-gradient(90deg, #b2ffff, #72e9f1, transparent); content: '';
+  transform: translateY(-50%);
+}
+[data-visual-effect="attack-nex"] .fx-impact { border-style: dashed; border-color: #a0f6b7; animation: emp-impact 440ms ease-out 150ms both; }
+[data-visual-effect="attack-aeris"] .fx-impact { border-style: double; border-color: #d5b8ff; animation: time-impact 460ms ease-out 160ms both; }
+[data-visual-effect="attack-aeris"] .arena-grid { animation: temporal-pause 450ms ease-out both; }
+[data-visual-effect="shield-ready"] .fx-shield { animation: shield-ripple 450ms ease-out both; }
+[data-visual-effect^="dodge-"] .fighter-player .fighter-aura { opacity: .8; }
+[data-visual-effect="dodge-left"] .fighter-player,
+[data-visual-effect="dodge-right"] .fighter-player { filter: drop-shadow(20px 0 0 #7be7f14d); }
+[data-visual-effect="super-vex"] .combat-cinematic::before,
+[data-visual-effect="super-nex"] .combat-cinematic::before,
+[data-visual-effect="super-aeris"] .combat-cinematic::before {
+  position: absolute; inset: 14% 22%; border: 2px solid currentColor; border-radius: 50%;
+  color: #a8f7f7; content: ''; opacity: 0; animation: super-ring 850ms ease-out both;
+}
+[data-visual-effect="super-vex"] .combat-cinematic::after { top: 68%; left: 15%; right: 15%; width: auto; height: 11px; animation: overdrive-beam 850ms ease-out both; }
+[data-visual-effect="super-nex"] .combat-cinematic::before { border-radius: 3px; border-style: dashed; color: #9df2b7; }
+[data-visual-effect="super-nex"] .fighter-boss { animation: hud-glitch 860ms steps(7, end) both; }
+[data-visual-effect="super-aeris"] .combat-cinematic::before { color: #d2b3ff; animation: super-ring 1s ease-out both; }
+[data-visual-effect="super-aeris"] .arena-grid { opacity: .18; }
+[data-visual-effect^="super-"] .fighter-player .fighter-core { animation: super-core 950ms ease-out both; }
+[data-visual-effect^="super-"] .fx-impact { animation: super-impact 870ms ease-out 480ms both; }
+
+@keyframes entrance-veil { 0%, 75% { opacity: 1; visibility: visible; } 100% { opacity: 0; visibility: hidden; } }
+@keyframes entrance-warning { 0%, 7% { opacity: 0; transform: translateY(-12px); } 15%, 45% { opacity: 1; transform: none; } 68%, 100% { opacity: 0; } }
+@keyframes entrance-subtitle { 0%, 24% { opacity: 0; } 34%, 68% { opacity: 1; } 90%, 100% { opacity: 0; } }
+@keyframes entrance-name { 0%, 35% { opacity: 0; transform: scale(1.3); } 47%, 86% { opacity: 1; transform: scale(1); } 100% { opacity: 0; } }
+@keyframes entrance-link { 0%, 66% { opacity: 0; } 76%, 94% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes entrance-figure { 0%, 28% { opacity: 0; transform: translateY(32px) scale(.8); } 80%, 100% { opacity: 1; transform: none; } }
+@keyframes echo-entrance-figure { 0%, 20% { opacity: 0; transform: translateX(24px) scale(.7); } 30%, 45% { opacity: .35; transform: translateX(-14px); } 75%, 100% { opacity: 1; transform: none; } }
+@keyframes entrance-core { 0%, 62% { opacity: 0; } 75% { opacity: 1; box-shadow: 0 0 30px currentColor; } 100% { opacity: 1; } }
+@keyframes hud-glitch { 20% { transform: translateX(3px); opacity: .7; } 42% { transform: translateX(-4px); } 62% { transform: none; opacity: 1; } }
+@keyframes combat-banner { 0% { opacity: 0; transform: translate(-50%, 12px) scale(.9); } 18%, 72% { opacity: 1; transform: translate(-50%, 0) scale(1); } 100% { opacity: 0; transform: translate(-50%, -20px); } }
+@keyframes super-core-arrives { 25%, 65% { border-color: #c9ffdc; box-shadow: 0 0 18px #9df8c680; } }
+@keyframes super-core-ring { 45% { box-shadow: 0 0 0 7px #adffda55; } }
+@keyframes shield-impact { 40% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 22px currentColor; } }
+@keyframes critical-edge { to { box-shadow: inset 3px 0 #ff718566; } }
+@keyframes echo-disconnect { 0%, 17% { opacity: 1; transform: none; } 25% { transform: translateX(5px); } 42% { transform: translateX(-7px); opacity: .8; } 70% { opacity: .45; transform: scale(1.13); } 100% { opacity: 0; transform: scale(1.35); } }
+@keyframes echo-shatter { 0% { opacity: .8; transform: none; } 60% { opacity: 1; transform: scale(1.7) rotate(18deg); } 100% { opacity: 0; transform: scale(2.4) rotate(45deg); } }
+@keyframes victory-reveal { from { opacity: 0; transform: translateY(22px) scale(.92); } 60% { opacity: 1; transform: translateY(-4px) scale(1.03); } to { transform: none; } }
+@keyframes record-reveal { from { opacity: 0; transform: scale(.7); } 65% { opacity: 1; transform: scale(1.07); } to { transform: none; } }
+@keyframes attack-charge { 30% { transform: scale(1.65); box-shadow: 0 0 26px currentColor; } }
+@keyframes emp-impact { 0%, 32% { opacity: 0; transform: scale(.3) rotate(0); } 48% { opacity: 1; } 100% { opacity: 0; transform: scale(6) rotate(45deg); } }
+@keyframes time-impact { 0%, 32% { opacity: 0; transform: scale(.2); } 50% { opacity: 1; } 100% { opacity: 0; transform: scale(7); } }
+@keyframes super-ring { 0%, 27% { opacity: 0; transform: scale(.2); } 48% { opacity: .9; } 100% { opacity: 0; transform: scale(1.6); } }
+@keyframes overdrive-beam { 0%, 34% { opacity: 0; transform: translateY(-50%) scaleX(.1); } 50%, 70% { opacity: 1; transform: translateY(-50%) scaleX(1); } 100% { opacity: 0; transform: translateY(-50%) scaleX(1.2); } }
+@keyframes super-core { 0%, 30% { opacity: .5; } 56% { opacity: 1; transform: scale(2); box-shadow: 0 0 35px currentColor; } to { transform: none; } }
+@keyframes super-impact { 0%, 45% { opacity: 0; transform: scale(.3); } 65% { opacity: 1; transform: scale(3); } to { opacity: 0; transform: scale(9); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .entrance-active .boss-intro, .encounter-echo.entrance-active .boss-intro { display: grid; animation: none; visibility: visible; opacity: 1; }
+  .boss-intro span, .boss-intro small, .boss-intro strong, .boss-intro em,
+  .entrance-active .fighter-boss, .encounter-echo.entrance-active .fighter-boss,
+  .combat-banner, .floating-combat-text, .result-screen.is-victory h2, .new-record { animation: none; }
+  .combat-banner { opacity: 1; transform: translateX(-50%); }
+  .floating-combat-text { opacity: 1; }
+  [data-visual-effect^="attack-"] .arena, [data-visual-effect^="super-"] .arena,
+  [data-visual-effect^="dodge-"] .fighter-player, .echo-death-active .fighter-echo { animation: none; }
+  .player-critical .player-status { animation: none; border-left: 2px solid #ff7185; }
 }

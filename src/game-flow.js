@@ -83,6 +83,7 @@ export class GameFlow {
     this.state = APP_STATES.CAMERA
     this.mode = 'STORY'
     this.recordSaved = false
+    this.newRecord = false
     this.soundEnabled = soundEnabled
     this.onToggleSound = onToggleSound
     this.camera = { state: 'connecting', message: 'CONNECTING CAMERA' }
@@ -144,11 +145,13 @@ export class GameFlow {
       case 'STORY_MODE':
         this.mode = 'STORY'
         this.recordSaved = false
+        this.newRecord = false
         this.setState(APP_STATES.INTRO)
         break
       case 'BOSS_RUSH':
         this.mode = 'BOSS RUSH'
         this.recordSaved = false
+        this.newRecord = false
         this.result = null
         this.wardenResult = null
         this.setState(APP_STATES.HERO_SELECT)
@@ -244,8 +247,13 @@ export class GameFlow {
 
   saveFinishedRun() {
     if (this.recordSaved || !this.result || !['VICTORY', 'DEFEAT'].includes(this.result.outcome)) return
+    const previousBest = readRecords().filter((record) => record.mode === this.mode && record.result === 'VICTORY')
+      .reduce((best, record) => Math.max(best, record.score), -Infinity)
+    const qualifies = this.result.outcome === 'VICTORY' && this.result.score > previousBest
     saveRecord({ score: this.result.score, hero: this.selectedHero, mode: this.mode,
       result: this.result.outcome })
+    this.newRecord = qualifies && readRecords().some((record) => record.mode === this.mode &&
+      record.result === 'VICTORY' && record.score === this.result.score)
     this.recordSaved = true
   }
 
@@ -519,6 +527,7 @@ export class GameFlow {
           <p class="result-operative">OPERATIVE <span>${this.selectedHero}</span></p>
           <div class="rush-targets"><span>WARDEN: ${wardenDefeated ? 'DEFEATED' : 'NOT DEFEATED'}</span><span>ECHO: ${victory ? 'DEFEATED' : wardenDefeated ? 'NOT DEFEATED' : 'NOT REACHED'}</span></div>
           <p>SCORE <span>${Number(this.result?.score ?? 0).toLocaleString()}</span></p>
+          ${victory && this.newRecord ? '<div class="new-record">✦ NEW RECORD ✦</div>' : ''}
         </div>
         <div class="screen-actions"></div>
       </section>`
@@ -691,9 +700,11 @@ export class GameFlow {
         <p class="screen-kicker">${victory ? 'NETWORK CONTROL RESTORED' : final ? 'ECHO CONTROL: 100%' : 'WARDEN · SECURITY LAYER ACTIVE'}</p>
         <h2 id="result-title">${victory ? 'MISSION <span>COMPLETE</span>' : 'CONNECTION <span>LOST</span>'}</h2>
         <div class="result-summary">
-          <strong>${victory ? 'WARDEN: DEFEATED · ECHO: DEFEATED' : 'OPERATIVE LINK: TERMINATED'}</strong>
+          <strong>${victory ? 'ARCANE PROTOCOL // CONTROL RESTORED' : 'OPERATIVE LINK: TERMINATED'}</strong>
           <p class="result-operative">OPERATIVE <span>${hero.id}</span></p>
           <p>${victory ? 'FINAL SCORE' : 'SCORE'} <span>${Number(this.result?.score ?? 0).toLocaleString()}</span></p>
+          ${victory ? '<div class="result-targets"><span>WARDEN // DEFEATED</span><span>ECHO // DEFEATED</span></div>' : ''}
+          ${victory && this.newRecord ? '<div class="new-record">✦ NEW RECORD ✦</div>' : ''}
           ${this.result?.stats ? `<dl class="result-stats">
             ${Object.entries({ attacks: 'ATTACKS LANDED', blocks: 'BLOCKS', dodges: 'DODGES', combos: 'COMBOS USED' })
               .map(([key, label]) => `<div><dt>${label}</dt><dd>${this.result.stats[key]}</dd></div>`).join('')}
@@ -751,9 +762,9 @@ function combatMarkup(hero, boss) {
       <section class="combat-panel encounter-${boss.cssClass}" aria-label="Combat arena">
       <div class="combat-topline"><span>ENCOUNTER // ${boss.encounter}</span><strong>● COMBAT LINK ACTIVE</strong><span>${hero.id} VS ${boss.name}</span></div>
       <div class="combat-hud">
-        <div class="player-status"><div class="stat-label"><span>OPERATIVE // ${hero.id}</span><strong data-player-hp>100 / 100</strong></div><div class="health-track player-track"><span data-player-bar></span></div><small>VITAL LINK</small></div>
+        <div class="player-status"><div class="stat-label"><span>OPERATIVE // ${hero.id}</span><strong data-player-hp>100 / 100</strong></div><div class="health-track player-track"><span data-player-bar></span></div><small data-player-condition>VITAL LINK</small></div>
         <div class="score-status"><span>LIVE SCORE</span><strong data-score>0</strong></div>
-        <div class="boss-status"><div class="stat-label"><span>${boss.name}</span><strong data-boss-hp>${boss.hp} / ${boss.hp}</strong></div><div class="health-track boss-track"><span data-boss-bar></span></div><small>CORE INTEGRITY</small></div>
+        <div class="boss-status"><div class="stat-label"><span>${boss.name}</span><strong data-boss-hp>${boss.hp} / ${boss.hp}</strong></div><div class="health-track boss-track"><span data-boss-bar></span></div><small data-boss-condition>CORE INTEGRITY</small></div>
       </div>
       <div class="arena">
         <div class="arena-grid" aria-hidden="true"></div>
@@ -761,7 +772,7 @@ function combatMarkup(hero, boss) {
         <div class="warning-panel" data-warning hidden><span class="warning-eyebrow">⚠ THREAT DETECTED</span><strong data-warning-title>ENERGY BLAST</strong><span class="warning-use">RESPONSE REQUIRED</span><span data-warning-instruction>✋ OPEN PALM TO BLOCK</span><span class="warning-countdown" data-warning-countdown>1.8s</span></div>
         <div class="combat-fx" aria-hidden="true"><span class="fx-projectile"></span><span class="fx-impact"></span><span class="fx-shield"></span></div>
         <div class="combat-cinematic" aria-hidden="true"><span class="cinematic-kicker">ARCANE PROTOCOL // SUPER CORE</span><strong></strong><span class="cinematic-subtitle"></span></div>
-        <div class="boss-intro" aria-hidden="true"><span>⚠ HOSTILE DETECTED</span><strong>${boss.id === 'WARDEN' ? 'CORE SENTINEL' : 'UNAUTHORIZED ENTITY'}</strong><small>${boss.name} // MATERIALIZING</small></div>
+        <div class="boss-intro" aria-hidden="true"><span>${boss.id === 'WARDEN' ? '⚠ THREAT DETECTED' : '⚠ SYSTEM WARNING'}</span><small>${boss.id === 'WARDEN' ? 'CORE SENTINEL' : 'UNAUTHORIZED ENTITY'}</small><strong>${boss.name}</strong><em>${boss.id === 'WARDEN' ? 'COMBAT LINK ACTIVE' : 'SYSTEM COMPROMISED // COMBAT LINK RESTORED'}</em></div>
         <div class="fighters" aria-hidden="true">
           <div class="fighter fighter-player fighter-${hero.id.toLowerCase()}">${fighterDetailsMarkup()}<span>${hero.id}</span></div>
           <div class="fighter fighter-boss fighter-${boss.cssClass}">${fighterDetailsMarkup()}<span>${boss.name}</span></div>
