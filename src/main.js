@@ -132,9 +132,18 @@ async function initializeCamera() {
     document.querySelector('.tracking-live').innerHTML = '<i></i> LIVE'
   } catch (error) {
     console.error('Camera or hand tracking could not be started.', error)
-    statusElement.textContent = `CAMERA ERROR · ${error.message}`
+    const trackingInitializationFailed = Boolean(cameraStream)
+    const failureLabel = trackingInitializationFailed ? 'TRACKING ERROR' : 'CAMERA ERROR'
+    const failureMessage = trackingInitializationFailed
+      ? 'Hand tracking could not be initialized. Check your connection and reload the page.'
+      : error.message
+    if (trackingInitializationFailed) {
+      stopCamera(cameraStream)
+      cameraStream = undefined
+    }
+    statusElement.textContent = `${failureLabel} · ${failureMessage}`
     statusElement.className = 'camera-status is-error'
-    flow.setCameraStatus('error', `CAMERA ERROR · ${error.message}`)
+    flow.setCameraStatus('error', `${failureLabel} · ${failureMessage}`)
     document.querySelector('.tracking-live').innerHTML = '<i></i> OFFLINE'
   }
 }

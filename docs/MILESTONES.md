@@ -165,10 +165,9 @@ Status: DONE
 - transitions
 
 ---
-
 ## M10 - Visual Polish
 
-Status: TODO
+Status: DONE
 
 - cyberpunk design
 - particles
