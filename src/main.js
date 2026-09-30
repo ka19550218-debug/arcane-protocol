@@ -23,7 +23,7 @@ app.innerHTML = `
         <div class="main-stage" data-stage></div>
       </section>
       <aside class="tracking-panel" aria-label="Gesture controls and camera">
-        <div class="tracking-heading"><span>HAND LINK // OPTICAL SENSOR</span><span class="tracking-live"><i></i> INITIALIZING</span></div>
+        <div class="tracking-heading"><span>NEURAL HAND LINK</span><span class="tracking-live"><i></i> INITIALIZING</span></div>
         <div class="camera-frame">
           <video class="camera-feed" autoplay muted playsinline aria-label="Mirrored webcam preview"></video>
           <canvas class="hand-overlay" aria-hidden="true"></canvas>
@@ -32,15 +32,19 @@ app.innerHTML = `
           <span class="camera-corner corner-bottom" aria-hidden="true">ARCANE SENSOR ARRAY</span>
           <p class="camera-status" role="status">CONNECTING CAMERA</p>
         </div>
-        <div class="tracking-readout"><span>DETECTED INPUT</span><p class="gesture-display" aria-live="polite">LEFT: NONE · RIGHT: NONE</p></div>
+        <div class="tracking-readout"><div class="link-telemetry"><span>TRACKING <strong data-tracking-state>SEARCHING</strong></span><span>GESTURE <strong data-current-input>NONE</strong></span></div><p class="gesture-display" aria-live="polite">LEFT: NONE · RIGHT: NONE</p></div>
         <p class="shield-status" data-shield>SHIELD OFFLINE</p>
         <section class="gesture-quality is-neutral" aria-live="polite" aria-label="Gesture quality feedback">
           <div class="quality-heading"><span>GESTURE ANALYSIS</span><strong class="gesture-quality-score">—</strong></div>
-          <strong class="gesture-quality-title">AWAITING HAND</strong>
+          <div class="quality-readout"><span>ATTEMPT</span><strong data-quality-attempt>—</strong><span>STATUS</span><strong class="gesture-quality-title">AWAITING HAND</strong></div>
           <div class="gesture-quality-meter" aria-hidden="true"><span></span></div>
           <p class="gesture-quality-message">Show a gesture to receive guidance</p>
+          <div class="finger-checks" data-finger-checks hidden aria-label="Finger status">
+            <span data-finger="INDEX">INDEX —</span><span data-finger="MIDDLE">MIDDLE —</span>
+            <span data-finger="RING">RING —</span><span data-finger="PINKY">PINKY —</span>
+          </div>
         </section>
-        <div class="controls-label">OPERATIVE COMMAND MAP</div>
+        <div class="controls-label">COMMANDS // QUICK REFERENCE</div>
         <div class="controls-guide">${abilityLegend(getHero()).map(([gesture, name]) => `<p><strong>${gesture}</strong><span>${name}</span></p>`).join('')}</div>
         <details class="tracking-diagnostics">
           <summary>DEVELOPER DIAGNOSTICS</summary>
@@ -56,16 +60,23 @@ const stageFrameElement = document.querySelector('.stage-frame')
 const stageElement = document.querySelector('[data-stage]')
 const videoElement = document.querySelector('.camera-feed')
 const overlayElement = document.querySelector('.hand-overlay')
+const overlayContext = overlayElement.getContext('2d')
 const statusElement = document.querySelector('.camera-status')
 const gestureDisplayElement = document.querySelector('.gesture-display')
 const gestureDebugElement = document.querySelector('.gesture-debug')
 const gestureQualityElement = document.querySelector('.gesture-quality')
 const gestureQualityTitleElement = document.querySelector('.gesture-quality-title')
+const gestureQualityAttemptElement = document.querySelector('[data-quality-attempt]')
+const fingerChecksElement = document.querySelector('[data-finger-checks]')
+const fingerCheckElements = Object.fromEntries(['INDEX', 'MIDDLE', 'RING', 'PINKY'].map((name) =>
+  [name, document.querySelector(`[data-finger="${name}"]`)]))
 const gestureQualityScoreElement = document.querySelector('.gesture-quality-score')
 const gestureQualityMeterElement = document.querySelector('.gesture-quality-meter > span')
 const gestureQualityMessageElement = document.querySelector('.gesture-quality-message')
 const gestureQualityDebugElement = document.querySelector('.gesture-quality-debug')
 const shieldElement = document.querySelector('[data-shield]')
+const trackingStateElement = document.querySelector('[data-tracking-state]')
+const currentInputElement = document.querySelector('[data-current-input]')
 const twoHandInput = new TwoHandInput()
 const combatGame = new CombatGame()
 const audio = new AudioManager()
@@ -79,6 +90,10 @@ let stopHandTracking
 let combatView = null
 let resultPresentation = null
 let cursorHandSide = 'LEFT'
+let firstControlsShown = false
+
+const FINGER_TIPS = { INDEX: 8, MIDDLE: 12, RING: 16, PINKY: 20 }
+const MAIN_FINGERS = Object.keys(FINGER_TIPS)
 
 const gestureNavigation = new GestureNavigation({
   container: stageFrameElement,
@@ -86,6 +101,7 @@ const gestureNavigation = new GestureNavigation({
   onSelect: (selection) => {
     audio.unlock()
     audio.play('select')
+    if (selection.startsWith('SELECT_')) showHeroSync(selection.slice(7))
     flow.select(selection)
   },
 })
@@ -113,6 +129,10 @@ function handleStateChange(state) {
     combatGame.start(performance.now(), flow.selectedHero, flow.bossId)
     combatView = new CombatView({ root: stageElement, shield: shieldElement, scoreOffset: flow.scoreBeforeBattle })
     combatView.render(combatGame, performance.now())
+    if (!firstControlsShown) {
+      firstControlsShown = true
+      combatView.showFirstControls()
+    }
     return
   }
 
@@ -184,6 +204,17 @@ function updateGestureDisplay(landmarks, handedness, timestamp) {
     feedbackHand,
     feedbackHand ? hands[feedbackHand].debug.rawGesture : GESTURES.NONE,
   )
+  const visibleHand = feedbackHand ? hands[feedbackHand] : null
+  setPresentationText(trackingStateElement, !visibleHand ? 'SEARCHING'
+    : visibleHand.feedback.state === 'success' ? 'LOCKED' : 'HAND DETECTED'
+  )
+  const currentGesture = visibleHand && visibleHand.gesture !== GESTURES.NONE ? visibleHand.gesture
+    : hands.LEFT.gesture !== GESTURES.NONE ? hands.LEFT.gesture : hands.RIGHT.gesture
+  const gestureLabel = formatGesture(currentGesture ?? GESTURES.NONE)
+  setPresentationText(currentInputElement, gestureLabel)
+  const combatInput = stageElement.querySelector('[data-current-gesture]')
+  if (combatInput) setPresentationText(combatInput, `INPUT // ${gestureLabel}`)
+  if (visibleHand?.feedback.state === 'correcting') drawFingerCorrections(visibleHand)
 
   const screenChangedByGesture = flow.handleHands(hands, timestamp)
   if (screenChangedByGesture) gestureNavigation.lockUntilPointRelease()
@@ -233,7 +264,9 @@ function updateGestureQuality(feedback, side, rawGesture) {
 
   if (feedback.state === 'neutral') {
     gestureQualityElement.className = 'gesture-quality is-neutral'
-    gestureQualityTitleElement.textContent = feedback.fingerStates ? `${side} · NO STATIC GESTURE` : 'AWAITING HAND'
+    gestureQualityTitleElement.textContent = feedback.fingerStates ? 'SCANNING' : 'AWAITING HAND'
+    gestureQualityAttemptElement.textContent = '—'
+    fingerChecksElement.hidden = true
     gestureQualityScoreElement.textContent = '—'
     gestureQualityMeterElement.style.width = '0%'
     gestureQualityMessageElement.textContent = feedback.fingerStates
@@ -243,13 +276,59 @@ function updateGestureQuality(feedback, side, rawGesture) {
   }
 
   gestureQualityElement.className = `gesture-quality is-${feedback.state}`
-  const label = feedback.state === 'success' ? formatGesture(feedback.gesture) : `ATTEMPTING ${formatGesture(feedback.gesture)}`
-  gestureQualityTitleElement.textContent = `${side} // ${feedback.state === 'success' ? 'GESTURE LOCKED · ' : ''}${label}`
+  gestureQualityAttemptElement.textContent = `${side} // ${formatGesture(feedback.gesture)}`
+  gestureQualityTitleElement.textContent = feedback.state === 'success' ? 'GESTURE LOCKED'
+    : feedback.state === 'pending' ? 'CONFIRMING' : 'CORRECTION NEEDED'
   gestureQualityScoreElement.textContent = `${feedback.quality}%`
   gestureQualityMeterElement.style.width = `${feedback.quality}%`
   gestureQualityMessageElement.textContent = feedback.state === 'success'
-    ? 'Gesture recognized'
+    ? 'Pose aligned and recognized'
     : feedback.state === 'pending' ? 'Confirming gesture…' : feedback.correction
+  fingerChecksElement.hidden = !feedback.fingerStates
+  if (feedback.fingerStates) {
+    for (const name of MAIN_FINGERS) {
+      const needsFix = fingerNeedsCorrection(feedback.gesture, name, feedback.fingerStates[name])
+      const element = fingerCheckElements[name]
+      setPresentationText(element, `${name} ${needsFix ? 'FIX' : 'OK'}`)
+      element.classList.toggle('needs-fix', needsFix)
+    }
+  }
+}
+
+function fingerNeedsCorrection(gesture, finger, state) {
+  if (gesture === GESTURES.OPEN_PALM) return state !== 'EXTENDED'
+  if (gesture === GESTURES.FIST) return state !== 'CURLED'
+  if (gesture === GESTURES.POINT) return finger === 'INDEX' ? state !== 'EXTENDED' : state === 'EXTENDED'
+  if (gesture === GESTURES.V_SIGN) return (finger === 'INDEX' || finger === 'MIDDLE')
+    ? state !== 'EXTENDED' : state === 'EXTENDED'
+  return false
+}
+
+function drawFingerCorrections(hand) {
+  if (!hand.landmarks || !overlayElement.width) return
+  overlayContext.strokeStyle = '#ffcf76'
+  overlayContext.lineWidth = Math.max(3, overlayElement.width / 180)
+  for (const name of MAIN_FINGERS) {
+    if (!fingerNeedsCorrection(hand.feedback.gesture, name, hand.feedback.fingerStates[name])) continue
+    const tip = hand.landmarks[FINGER_TIPS[name]]
+    overlayContext.beginPath()
+    overlayContext.arc(tip.x * overlayElement.width, tip.y * overlayElement.height,
+      Math.max(10, overlayElement.width / 45), 0, Math.PI * 2)
+    overlayContext.stroke()
+  }
+}
+
+function showHeroSync(heroId) {
+  if (!['VEX', 'NEX', 'AERIS'].includes(heroId)) return
+  const overlay = document.createElement('div')
+  overlay.className = `hero-sync hero-sync-${heroId.toLowerCase()}`
+  overlay.innerHTML = `<span>OPERATIVE SYNCHRONIZED</span><strong>${heroId}</strong>`
+  stageFrameElement.append(overlay)
+  setTimeout(() => overlay.remove(), 850)
+}
+
+function setPresentationText(element, value) {
+  if (element.textContent !== value) element.textContent = value
 }
 
 function formatMetric(value, digits = 2) {

@@ -30,6 +30,7 @@ export class GestureNavigation {
     this.lockedUntilPointRelease = false
     this.smoothedPosition = null
     this.lastTimestamp = 0
+    this.hoveredHeroCard = null
 
     this.menu.addEventListener('click', (event) => {
       const button = event.target.closest('[data-navigation-value]')
@@ -41,6 +42,7 @@ export class GestureNavigation {
     if (gesture !== GESTURES.POINT || !indexTip) {
       this.lockedUntilPointRelease = false
       this.hideCursor()
+      this.updateHeroHover(null)
       this.resetDwell()
       this.smoothedPosition = null
       return
@@ -49,6 +51,7 @@ export class GestureNavigation {
     const target = mapMirroredPoint(indexTip, videoElement, this.container)
     const position = this.smoothPosition(target, timestamp)
     this.showCursor(position)
+    this.updateHeroHover(position)
 
     if (this.lockedUntilPointRelease) return
 
@@ -101,6 +104,18 @@ export class GestureNavigation {
     this.cursor.classList.remove('is-hovering')
   }
 
+  updateHeroHover(position) {
+    let card = null
+    if (position && this.menu.querySelector?.('.hero-screen') && document.elementFromPoint) {
+      const bounds = this.container.getBoundingClientRect()
+      card = document.elementFromPoint(bounds.left + position.x, bounds.top + position.y)?.closest('.hero-card')
+    }
+    if (card === this.hoveredHeroCard) return
+    this.hoveredHeroCard?.classList.remove('is-point-hovered')
+    card?.classList.add('is-point-hovered')
+    this.hoveredHeroCard = card
+  }
+
   getHoveredButton(position) {
     const containerRect = this.container.getBoundingClientRect()
     const clientX = containerRect.left + position.x
@@ -114,6 +129,7 @@ export class GestureNavigation {
 
   setProgress(button, progress) {
     button.style.setProperty('--dwell-progress', progress)
+    button.closest?.('.hero-card')?.style.setProperty('--card-dwell-progress', progress)
     this.cursor.style.setProperty('--cursor-dwell', progress)
   }
 
@@ -133,6 +149,7 @@ export class GestureNavigation {
     this.selectionLocked = true
     this.lockedUntilPointRelease = true
     this.cursor.classList.remove('is-hovering')
+    this.updateHeroHover(null)
   }
 
   activate(button) {

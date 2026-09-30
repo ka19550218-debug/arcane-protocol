@@ -702,8 +702,8 @@ export class GameFlow {
         <div class="result-summary">
           <strong>${victory ? 'ARCANE PROTOCOL // CONTROL RESTORED' : 'OPERATIVE LINK: TERMINATED'}</strong>
           <p class="result-operative">OPERATIVE <span>${hero.id}</span></p>
-          <p>${victory ? 'FINAL SCORE' : 'SCORE'} <span>${Number(this.result?.score ?? 0).toLocaleString()}</span></p>
-          ${victory ? '<div class="result-targets"><span>WARDEN // DEFEATED</span><span>ECHO // DEFEATED</span></div>' : ''}
+          <p class="result-score">${victory ? 'FINAL SCORE' : 'SCORE'} <span>${Number(this.result?.score ?? 0).toLocaleString()}</span></p>
+          ${victory ? '<div class="result-targets"><span><b>WARDEN</b><em>DEFEATED</em></span><span><b>ECHO</b><em>DEFEATED</em></span></div>' : ''}
           ${victory && this.newRecord ? '<div class="new-record">✦ NEW RECORD ✦</div>' : ''}
           ${this.result?.stats ? `<dl class="result-stats">
             ${Object.entries({ attacks: 'ATTACKS LANDED', blocks: 'BLOCKS', dodges: 'DODGES', combos: 'COMBOS USED' })
@@ -763,13 +763,13 @@ function combatMarkup(hero, boss) {
       <div class="combat-topline"><span>ENCOUNTER // ${boss.encounter}</span><strong>● COMBAT LINK ACTIVE</strong><span>${hero.id} VS ${boss.name}</span></div>
       <div class="combat-hud">
         <div class="player-status"><div class="stat-label"><span>OPERATIVE // ${hero.id}</span><strong data-player-hp>100 / 100</strong></div><div class="health-track player-track"><span data-player-bar></span></div><small data-player-condition>VITAL LINK</small></div>
-        <div class="score-status"><span>LIVE SCORE</span><strong data-score>0</strong></div>
+        <div class="score-status"><span>LIVE SCORE</span><strong data-score>0</strong><small data-current-gesture>INPUT // NONE</small></div>
         <div class="boss-status"><div class="stat-label"><span>${boss.name}</span><strong data-boss-hp>${boss.hp} / ${boss.hp}</strong></div><div class="health-track boss-track"><span data-boss-bar></span></div><small data-boss-condition>CORE INTEGRITY</small></div>
       </div>
       <div class="arena">
         <div class="arena-grid" aria-hidden="true"></div>
         <div class="arena-heading" aria-hidden="true"><span>TACTICAL FEED // ${boss.id}</span><span>HOSTILE SIGNAL DETECTED</span></div>
-        <div class="warning-panel" data-warning hidden><span class="warning-eyebrow">⚠ THREAT DETECTED</span><strong data-warning-title>ENERGY BLAST</strong><span class="warning-use">RESPONSE REQUIRED</span><span data-warning-instruction>✋ OPEN PALM TO BLOCK</span><span class="warning-countdown" data-warning-countdown>1.8s</span></div>
+        <div class="warning-panel" data-warning hidden><span class="warning-eyebrow">⚠ THREAT DETECTED</span><strong data-warning-title>ENERGY BLAST</strong><span class="warning-use">USE THIS GESTURE</span><div class="warning-response"><span data-warning-icon>✋</span><b data-warning-action>OPEN PALM</b></div><span data-warning-instruction>TO BLOCK</span><span class="warning-countdown" data-warning-countdown>1.8s</span></div>
         <div class="combat-fx" aria-hidden="true"><span class="fx-projectile"></span><span class="fx-impact"></span><span class="fx-shield"></span></div>
         <div class="combat-cinematic" aria-hidden="true"><span class="cinematic-kicker">ARCANE PROTOCOL // SUPER CORE</span><strong></strong><span class="cinematic-subtitle"></span></div>
         <div class="boss-intro" aria-hidden="true"><span>${boss.id === 'WARDEN' ? '⚠ THREAT DETECTED' : '⚠ SYSTEM WARNING'}</span><small>${boss.id === 'WARDEN' ? 'CORE SENTINEL' : 'UNAUTHORIZED ENTITY'}</small><strong>${boss.name}</strong><em>${boss.id === 'WARDEN' ? 'COMBAT LINK ACTIVE' : 'SYSTEM COMPROMISED // COMBAT LINK RESTORED'}</em></div>
@@ -779,7 +779,8 @@ function combatMarkup(hero, boss) {
         </div>
       </div>
       <div class="combat-controls" aria-label="Current operative abilities">
-        ${abilityLegend(hero).slice(0, 4).map(([gesture, name], index) => `<p data-ability-slot="${['attack', 'defense', 'dodge', 'super'][index]}"><span>${gesture}</span><strong>${name}</strong><small data-ability-state>READY</small></p>`).join('')}
+        ${[['attack', '✊', hero.attack.name], ['defense', '✋', hero.defense.name], ['dodge', '↔', hero.dodge], ['super', '✌', hero.ultimate.name]]
+          .map(([slot, icon, name]) => `<p data-ability-slot="${slot}"><span class="ability-icon">${icon}</span><strong>${name}</strong><small data-ability-state>READY</small></p>`).join('')}
       </div>
       <div class="super-meter" data-super-meter><div class="stat-label"><span><b>SUPER CORE</b> <em data-super-label>${hero.ultimate.name}</em></span><strong data-super-value>0%</strong></div>
         <div class="health-track super-track" role="progressbar" aria-label="Super Energy" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-super-progress><span data-super-bar style="width:0%"></span></div><small>✌ V SIGN // ACTIVATE AT 100%</small></div>

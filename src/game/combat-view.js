@@ -17,8 +17,11 @@ export class CombatView {
     this.bossBar = root.querySelector('[data-boss-bar]')
     this.bossCondition = root.querySelector('[data-boss-condition]')
     this.score = root.querySelector('[data-score]')
+    this.scoreStatus = root.querySelector('.score-status')
     this.warning = root.querySelector('[data-warning]')
     this.warningTitle = root.querySelector('[data-warning-title]')
+    this.warningIcon = root.querySelector('[data-warning-icon]')
+    this.warningAction = root.querySelector('[data-warning-action]')
     this.warningInstruction = root.querySelector('[data-warning-instruction]')
     this.warningCountdown = root.querySelector('[data-warning-countdown]')
     this.feedback = root.querySelector('[data-combat-feedback]')
@@ -82,14 +85,20 @@ export class CombatView {
     this.warning.hidden = !attack
     if (attack) {
       setText(this.warningTitle, frozen ? `${attack.label} · ${game.freezeLabel}` : attack.label)
-      let instruction = `↔ ${hero.dodge} ${attack.direction === 'SWIPE_LEFT' ? 'LEFT' : 'RIGHT'}`
+      let icon = attack.direction === 'SWIPE_LEFT' ? '←' : '→'
+      let action = attack.direction === 'SWIPE_LEFT' ? 'SWIPE LEFT' : 'SWIPE RIGHT'
+      let instruction = hero.dodge
       if (attack.type === 'ENERGY_BLAST') {
+        icon = '✋'
+        action = 'OPEN PALM'
         instruction = hero.defense.effect === 'freeze'
-          ? '✋ PALM / 2 PALMS TO PAUSE · ATTACK RESUMES'
+          ? 'PAUSE ONLY · ATTACK RESUMES'
           : attack.impactAt - now > hero.defense.durationMs
-            ? '✋ OPEN PALM AT 2.0s TO BLOCK'
-            : '✋ OPEN PALM TO BLOCK'
+            ? 'WAIT UNTIL 2.0s TO BLOCK'
+            : 'TO BLOCK'
       }
+      setText(this.warningIcon, icon)
+      setText(this.warningAction, action)
       setText(this.warningInstruction, instruction)
       const remainingMs = Math.max(0, attack.impactAt - now)
       setText(this.warningCountdown, `${(remainingMs / 1000).toFixed(1)}s`)
@@ -152,11 +161,17 @@ export class CombatView {
       } else if (event.type === 'block-success') {
         this.pulseClass('shield-impact', 500)
         this.floatText(event.perfect ? 'PERFECT BLOCK' : event.reflected ? 'REFLECTED' : 'BLOCKED', 'player')
-        if (event.perfect) this.showCombatBanner('PERFECT BLOCK  +100', 'perfect')
+        if (event.perfect) {
+          this.showCombatBanner('PERFECT BLOCK  +100', 'perfect')
+          this.pulseClass('perfect-action', 700)
+        }
         if (event.reflected) this.floatText('REFLECTED', 'boss')
       } else if (event.type === 'dodge-success') {
         this.floatText(event.perfect ? 'PERFECT DODGE' : 'DODGED', 'player')
-        if (event.perfect) this.showCombatBanner('PERFECT DODGE  +100', 'perfect')
+        if (event.perfect) {
+          this.showCombatBanner('PERFECT DODGE  +100', 'perfect')
+          this.pulseClass('perfect-action', 700)
+        }
       } else if (event.type === 'streak') {
         this.showCombatBanner(`COMBO x${event.count}`, 'combo')
       } else if (event.type === 'super-ready') {
@@ -167,6 +182,7 @@ export class CombatView {
       }
     }
     if (this.previousScore !== null && game.score !== this.previousScore) {
+      if (game.score > this.previousScore) this.showScoreGain(game.score - this.previousScore)
       this.score.classList.remove('score-updated')
       void this.score.offsetWidth
       this.score.classList.add('score-updated')
@@ -178,6 +194,25 @@ export class CombatView {
     this.panel.classList.add('entrance-active')
     if (this.panel.classList.contains('encounter-echo')) this.panel.classList.add('echo-glitch')
     setTimeout(() => this.panel.classList.remove('entrance-active', 'echo-glitch'), 1650)
+  }
+
+  showFirstControls() {
+    setTimeout(() => {
+      if (!this.arena.isConnected) return
+      const reminder = document.createElement('div')
+      reminder.className = 'first-combat-controls'
+      reminder.innerHTML = '<strong>GESTURE CONTROLS</strong><span>✊ ATTACK</span><span>✋ DEFENSE</span><span>↔ DODGE</span><span>✌ SUPER</span>'
+      this.arena.append(reminder)
+      setTimeout(() => reminder.remove(), 1250)
+    }, 1450)
+  }
+
+  showScoreGain(points) {
+    const gain = document.createElement('span')
+    gain.className = 'score-gain'
+    gain.textContent = `+${points.toLocaleString()}`
+    this.scoreStatus.append(gain)
+    setTimeout(() => gain.remove(), 900)
   }
 
   playEchoDeath() {
@@ -241,15 +276,15 @@ export class CombatView {
       attack: cooldown(game.nextPulseAt),
       defense: cooldown(game.nextShieldAt),
       dodge: cooldown(game.nextDodgeAt),
-      super: superReady ? 'SUPER READY' : `SUPER CHARGING · ${game.superEnergy}%`,
+      super: superReady ? 'SUPER READY · ✌ V SIGN' : `SUPER ${game.superEnergy}%`,
     }
     for (const [slot, element] of Object.entries(this.abilityStates)) {
       if (!element) continue
       const state = states[slot]
       setText(element.querySelector('[data-ability-state]'), state)
-      element.classList.toggle('is-ready', state === 'READY' || state === 'SUPER READY')
+      element.classList.toggle('is-ready', state === 'READY' || state.startsWith('SUPER READY'))
       element.classList.toggle('is-cooldown', state.startsWith('COOLDOWN'))
-      element.classList.toggle('is-charging', state.startsWith('SUPER CHARGING'))
+      element.classList.toggle('is-charging', slot === 'super' && !superReady)
     }
   }
 }

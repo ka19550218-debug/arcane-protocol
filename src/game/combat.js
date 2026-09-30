@@ -347,6 +347,7 @@ export class CombatGame {
       this.score += awarded
       this.increaseStreak()
       this.emitVisual('dodge-success', { perfect: Boolean(attack.perfectDodge) })
+      if (attack.perfectDodge) this.onAudio?.('perfect')
       this.showFeedback(`${attack.perfectDodge ? 'PERFECT DODGE' : 'DODGED'}  +${awarded}`, 'dodge', now)
       return
     }
@@ -367,6 +368,7 @@ export class CombatGame {
   blockFeedback(ability, attack, startedAt, blockScore, now) {
     const perfect = attack.impactAt - startedAt <= PERFECT_TIMING_MS
     if (perfect) this.score += PERFECT_SCORE
+    if (perfect) this.onAudio?.('perfect')
     this.increaseStreak()
     const timed = ability.reflectWindowMs === undefined || attack.impactAt - startedAt <= ability.reflectWindowMs
     const reflected = Boolean(ability.reflectDamage && timed)
